@@ -1,0 +1,150 @@
+{
+  "pages": [
+    {
+      "path": "pages/index/index",
+      "style": {
+        "navigationBarTitleText": "BS01"
+      }
+    },
+    {
+      "path": "pages/user/following",
+      "style": {
+        "navigationBarTitleText": "关注列表"
+      }
+    },
+    {
+      "path": "pages/user/followers",
+      "style": {
+        "navigationBarTitleText": "粉丝列表"
+      }
+    },
+    {
+      "path": "pages/user/notifications",
+      "style": {
+        "navigationBarTitleText": "消息通知"
+      }
+    },
+    {
+      "path": "pages/auth/login",
+      "style": {
+        "navigationBarTitleText": "登录"
+      }
+    },
+    {
+      "path": "pages/auth/forgot",
+      "style": {
+        "navigationBarTitleText": "找回密码"
+      }
+    },
+    {
+      "path": "pages/user/detail",
+      "style": {
+        "navigationBarTitleText": "用户主页"
+      }
+    },
+    {
+      "path": "pages/settings/index",
+      "style": {
+        "navigationBarTitleText": "设置"
+      }
+    },
+    {
+      "path": "pages/me/works",
+      "style": {
+        "navigationBarTitleText": "我的视频"
+      }
+    },
+    {
+      "path": "pages/me/favorites",
+      "style": {
+        "navigationBarTitleText": "我的收藏"
+      }
+    },
+    {
+      "path": "pages/me/likes",
+      "style": {
+        "navigationBarTitleText": "点赞记录"
+      }
+    },
+    {
+      "path": "pages/me/history",
+      "style": {
+        "navigationBarTitleText": "观看历史"
+      }
+    },
+    {
+      "path": "pages/me/watch-later",
+      "style": {
+        "navigationBarTitleText": "稍后再看"
+      }
+    },
+    {
+      "path": "pages/user/profile",
+      "style": {
+        "navigationBarTitleText": "个人中心"
+      }
+    },
+    {
+      "path": "pages/user/edit",
+      "style": {
+        "navigationBarTitleText": "编辑资料"
+      }
+    },
+    {
+      "path": "pages/video/detail",
+      "style": {
+        "navigationBarTitleText": "视频详情"
+      }
+    },
+    {
+      "path": "pages/video/category",
+      "style": {
+        "navigationBarTitleText": "分类详情"
+      }
+    },
+    {
+      "path": "pages/video/upload",
+      "style": {
+        "navigationBarTitleText": "发布视频"
+      }
+    },
+    {
+      "path": "pages/video/edit",
+      "style": {
+        "navigationBarTitleText": "编辑视频"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationStyle": "custom",
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "BS01",
+    "navigationBarBackgroundColor": "#F8F8F8",
+    "backgroundColor": "#F8F8F8",
+    "disableScroll": true
+  },
+    "tabBar": {
+    "color": "#999999",
+    "selectedColor": "#fb7299",
+    "borderStyle": "white",
+    "backgroundColor": "#ffffff",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "首页"
+      },
+      {
+        "pagePath": "pages/video/upload",
+        "text": "发布"
+      },
+      {
+        "pagePath": "pages/user/notifications",
+        "text": "消息"
+      },
+      {
+        "pagePath": "pages/user/profile",
+        "text": "我的"
+      }
+    ]
+  }
+}
