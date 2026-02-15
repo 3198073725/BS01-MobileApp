@@ -244,7 +244,7 @@
       v-model:show="showSharePopup"
       position="bottom"
       round
-      custom-style="padding: 40rpx 20rpx 60rpx;"
+      custom-style="padding: 40rpx 20rpx 100rpx;"
     >
       <view class="share-title">更多操作</view>
       <view class="share-grid">
@@ -770,6 +770,7 @@ const handleToggleWatchLater = async () => {
       data: { video_id: videoId.value }
     })
     if (videoDetail.value) {
+      // 这里的 res.saved 来自后端 API 返回值
       videoDetail.value.watch_later = !!res.saved
     }
     uni.showToast({
@@ -1090,6 +1091,7 @@ onLoad((options: any) => {
 .share-grid {
   display: flex;
   padding: 0 20rpx;
+  padding-bottom: 20px;
   gap: 40rpx;
 }
 

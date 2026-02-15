@@ -81,6 +81,17 @@ const request = <T = any>(config: RequestConfig): Promise<T> => {
       header,
       success: (res) => {
         if (res.statusCode >= 200 && res.statusCode < 300) {
+          // 暂时拦截 /api/notifications/ 以适配 VidSprout 自己的通知逻辑或测试环境
+          if (config.url?.startsWith('/api/notifications/') && BASE_URL.includes('vidsprout.local')) {
+            if (!config.silent) {
+              uni.showToast({
+                title: 'VidSprout',
+                icon: 'none'
+              });
+            }
+            reject({ statusCode: res.statusCode, data: res.data });
+            return;
+          }
           // 确保返回的是 JSON 对象，如果后端返回了 HTML（比如 404 页面），则视为错误
           if (typeof res.data === 'string' && res.data.includes('<!doctype html>')) {
             if (!config.silent) {

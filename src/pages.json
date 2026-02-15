@@ -3,7 +3,7 @@
     {
       "path": "pages/index/index",
       "style": {
-        "navigationBarTitleText": "BS01"
+        "navigationBarTitleText": "VidSprout"
       }
     },
     {
@@ -113,17 +113,44 @@
       "style": {
         "navigationBarTitleText": "编辑视频"
       }
+    },
+    {
+      "path": "pages/about/index",
+      "style": {
+        "navigationBarTitleText": "关于 VidSprout"
+      }
+    },
+    {
+      "path": "pages/legal/terms",
+      "style": {
+        "navigationBarTitleText": "用户协议",
+        "disableScroll": false
+      }
+    },
+    {
+      "path": "pages/legal/privacy",
+      "style": {
+        "navigationBarTitleText": "隐私政策",
+        "disableScroll": false
+      }
+    },
+    {
+      "path": "pages/legal/license",
+      "style": {
+        "navigationBarTitleText": "开源许可",
+        "disableScroll": false
+      }
     }
   ],
   "globalStyle": {
     "navigationStyle": "custom",
     "navigationBarTextStyle": "black",
-    "navigationBarTitleText": "BS01",
+    "navigationBarTitleText": "VidSprout",
     "navigationBarBackgroundColor": "#F8F8F8",
     "backgroundColor": "#F8F8F8",
     "disableScroll": true
   },
-    "tabBar": {
+  "tabBar": {
     "color": "#999999",
     "selectedColor": "#fb7299",
     "borderStyle": "white",
@@ -131,19 +158,27 @@
     "list": [
       {
         "pagePath": "pages/index/index",
-        "text": "首页"
+        "text": "首页",
+        "iconPath": "static/tabbar/home.png",
+        "selectedIconPath": "static/tabbar/home_active.png"
       },
       {
         "pagePath": "pages/video/upload",
-        "text": "发布"
+        "text": "发布",
+        "iconPath": "static/tabbar/publish.png",
+        "selectedIconPath": "static/tabbar/publish_active.png"
       },
       {
         "pagePath": "pages/user/notifications",
-        "text": "消息"
+        "text": "消息",
+        "iconPath": "static/tabbar/msg.png",
+        "selectedIconPath": "static/tabbar/msg_active.png"
       },
       {
         "pagePath": "pages/user/profile",
-        "text": "我的"
+        "text": "我的",
+        "iconPath": "static/tabbar/me.png",
+        "selectedIconPath": "static/tabbar/me_active.png"
       }
     ]
   }

@@ -23,23 +23,17 @@
         </view>
         <text :class="['cat-label', activeTab === 'comment' ? 'active' : '']">回复我的</text>
       </view>
-      <view class="cat-item">
-        <view class="icon-wrap green">
-          <van-icon name="friends-o" size="24px" color="#fff" />
-        </view>
-        <text class="cat-label">@我</text>
-      </view>
       <view class="cat-item" @click="activeTab = 'like'">
         <view class="icon-wrap red">
           <van-icon name="good-job-o" size="24px" color="#fff" />
         </view>
         <text :class="['cat-label', activeTab === 'like' ? 'active' : '']">收到的赞</text>
       </view>
-      <view class="cat-item">
+      <view class="cat-item" @click="activeTab = 'system'">
         <view class="icon-wrap orange">
           <van-icon name="bullhorn-o" size="24px" color="#fff" />
         </view>
-        <text class="cat-label">系统消息</text>
+        <text :class="['cat-label', activeTab === 'system' ? 'active' : '']">系统消息</text>
       </view>
     </view>
 
@@ -58,19 +52,23 @@
           class="notification-item"
           @click="handleNotificationClick(item)"
         >
-          <view class="unread-dot" v-if="!item.is_read"></view>
-          <image 
+          <view class="unread-dot" v-if="activeTab === 'system' ? !item.is_read : !item.is_read"></view>
+          <image
+            v-if="activeTab !== 'system'"
             class="avatar" 
             :src="formatImageUrl(item.actor)" 
             mode="aspectFill"
             @click.stop="goToUser(item.actor?.id)"
           />
+          <view v-else class="avatar sys-avatar">
+            <van-icon name="bullhorn-o" size="20px" color="#fff" />
+          </view>
           <view class="info">
             <view class="user-row">
-              <text class="user-name">{{ item.actor?.nickname || item.actor?.username }}</text>
+              <text class="user-name">{{ activeTab === 'system' ? '系统通知' : (item.actor?.nickname || item.actor?.username) }}</text>
               <text class="time">{{ formatDate(item.created_at) }}</text>
             </view>
-            <text class="content-text">{{ item.content }}</text>
+            <text class="content-text">{{ activeTab === 'system' ? (item.title || item.content || '') : item.content }}</text>
             
             <view class="video-preview" v-if="item.video">
               <image class="video-cover" :src="item.video.thumbnail_url" mode="aspectFill" />
@@ -99,7 +97,6 @@ import { formatImageUrl } from '@/utils/image'
 
 const tabs = [
   { name: 'reply', title: '回复我的', icon: 'comment-o', bgColor: '#1890ff' },
-  { name: 'at', title: '@我', icon: 'friends-o', bgColor: '#52c41a' },
   { name: 'like', title: '收到的赞', icon: 'good-job-o', bgColor: '#ff4d4f' },
   { name: 'system', title: '系统消息', icon: 'bullhorn-o', bgColor: '#faad14' }
 ]
@@ -127,6 +124,10 @@ onMounted(() => {
   fetchNotifications(true)
 })
 
+watch(activeTab, () => {
+  fetchNotifications(true)
+})
+
 const fetchNotifications = async (refresh = false) => {
   if (loading.value || (finished.value && !refresh)) return
   if (refresh) {
@@ -135,23 +136,43 @@ const fetchNotifications = async (refresh = false) => {
   }
   loading.value = true
   try {
-    let type = 'comment'
-    if (activeTab.value === 'like') type = 'like'
-    else if (activeTab.value === 'system') type = 'system'
-    else if (activeTab.value === 'at') type = 'at'
+    if (activeTab.value === 'system') {
+      const res = await request({
+        url: '/api/notifications/announcements/',
+        data: { page: page.value, page_size: 10 },
+        noAuth: false
+      })
+      const list = res.results || []
+      // normalize for UI
+      const mapped = list.map((a: any) => ({
+        id: a.id,
+        title: a.title,
+        content: a.content,
+        is_read: !!a.is_read,
+        created_at: a.published_at || a.created_at,
+        video: null,
+        actor: null,
+      }))
+      notifications.value = refresh ? mapped : [...notifications.value, ...mapped]
+      finished.value = !res.has_next
+      if (res.has_next) page.value++
+    } else {
+      let type = 'comment'
+      if (activeTab.value === 'like') type = 'like'
 
-    const res = await request({
-      url: '/api/interactions/notifications/',
-      data: {
-        page: page.value,
-        type: type
-      },
-      noAuth: false
-    })
-    const list = res.results || []
-    notifications.value = refresh ? list : [...notifications.value, ...list]
-    finished.value = !res.next
-    if (res.next) page.value++
+      const res = await request({
+        url: '/api/interactions/notifications/',
+        data: {
+          page: page.value,
+          type: type
+        },
+        noAuth: false
+      })
+      const list = res.results || []
+      notifications.value = refresh ? list : [...notifications.value, ...list]
+      finished.value = !res.next
+      if (res.next) page.value++
+    }
   } catch (err) {
     console.error('Fetch notifications error:', err)
   } finally {
@@ -175,6 +196,10 @@ const onActionSelect = (action: any) => {
 }
 
 const handleMarkAllRead = () => {
+  if (activeTab.value === 'system') {
+    uni.showToast({ title: '请逐条查看系统通知以标记已读', icon: 'none' })
+    return
+  }
   uni.showModal({
     title: '提示',
     content: '确定将所有消息标记为已读吗？',
@@ -194,6 +219,10 @@ const handleMarkAllRead = () => {
 }
 
 const handleClearAll = () => {
+  if (activeTab.value === 'system') {
+    uni.showToast({ title: '系统通知不支持清空', icon: 'none' })
+    return
+  }
   uni.showModal({
     title: '危险操作',
     content: '确定清空所有消息吗？清空后无法恢复。',
@@ -245,6 +274,25 @@ const getActionText = (item: any) => {
 }
 
 const handleNotificationClick = (item: any) => {
+  if (activeTab.value === 'system') {
+    const title = item.title || '系统通知'
+    const content = item.content || ''
+    uni.showModal({
+      title,
+      content,
+      showCancel: false,
+      success: async () => {
+        try {
+          await request({
+            url: `/api/notifications/announcements/${item.id}/read/`,
+            method: 'POST'
+          })
+          item.is_read = true
+        } catch (e) { /* no-op */ }
+      }
+    })
+    return
+  }
   if (item.video?.id) {
     goToVideo(item.video.id)
   }
@@ -387,6 +435,13 @@ onShow(() => {
   background-color: var(--bg-color);
 }
 
+.sys-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ff9500;
+}
+
 .info {
   flex: 1;
   overflow: hidden;
@@ -440,6 +495,14 @@ onShow(() => {
 .status-footer {
   padding: 40rpx 0 100rpx;
   text-align: center;
+}
+
+.no-more {
+  display: block;
+  padding: 30rpx 0 60rpx;
+  text-align: center;
+  font-size: 24rpx;
+  color: var(--text-muted);
 }
 
 .done-text {

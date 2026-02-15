@@ -56,7 +56,7 @@
 
         <van-cell-group :border="false" class="custom-group">
           <van-cell title="设置" icon="setting-o" is-link @click="goToSettings" />
-          <van-cell title="关于 BS01" icon="info-o" is-link />
+          <van-cell title="关于 VidSprout" icon="info-o" is-link @click="goToAbout" />
         </van-cell-group>
       </view>
 
@@ -207,6 +207,10 @@ const goToMeWatchLater = () => {
 const goToSettings = () => {
   if (!ensureLogin()) return
   uni.navigateTo({ url: '/pages/settings/index' })
+}
+
+const goToAbout = () => {
+  uni.navigateTo({ url: '/pages/about/index' })
 }
 
 const goToFollowing = () => {

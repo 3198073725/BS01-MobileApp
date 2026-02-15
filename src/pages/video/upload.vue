@@ -1,6 +1,6 @@
 <template>
   <view :class="['page', theme]">
-    <van-nav-bar title="发布视频" left-arrow @click-left="goBack" fixed placeholder :border="theme !== 'dark'" />
+    <van-nav-bar title="发布视频" fixed placeholder :border="theme !== 'dark'" />
     
     <scroll-view scroll-y class="content-scroll">
       <view class="upload-section">
@@ -126,20 +126,6 @@ const selectedTags = ref<any[]>([])
 const tagInput = ref('')
 const tagSuggestions = ref<any[]>([])
 const showCategoryPicker = ref(false)
-
-const goBack = () => {
-  if (uploading.value) {
-    uni.showModal({
-      title: '提示',
-      content: '正在上传中，确定退出吗？',
-      success: (res) => {
-        if (res.confirm) uni.navigateBack()
-      }
-    })
-  } else {
-    uni.navigateBack()
-  }
-}
 
 const pickVideo = () => {
   uni.chooseVideo({

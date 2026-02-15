@@ -91,8 +91,9 @@ const initAuthState = async () => {
     const me = await request({ url: '/api/users/me/', silent: true });
     userStore.setUserInfo(me as any);
   } catch (e: any) {
+    // 只有明确的 401 (Unauthorized) 才清理登录态，网络错误等不清理
     const sc = Number(e?.statusCode || 0)
-    if (sc === 401 || sc === 403) {
+    if (sc === 401) {
       userStore.logout();
     }
   }
@@ -243,9 +244,14 @@ html[data-theme='dark'] .van-search__content, .dark-mode .van-search__content { 
 /* 禁用原生滚动 */
 /* #ifdef H5 */
 html, body {
-  position: fixed;
   width: 100%;
   height: 100%;
+}
+
+/* 允许特定页面滚动 */
+html:not([data-scroll-enabled="true"]), 
+body:not([data-scroll-enabled="true"]) {
+  position: fixed;
   overscroll-behavior: none;
 }
 /* #endif */
