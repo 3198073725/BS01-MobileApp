@@ -42,6 +42,24 @@
         </view>
       </view>
 
+      <view class="user-header-section" v-else>
+        <view class="user-main">
+          <image
+            class="avatar"
+            src="/static/logo.png"
+            mode="aspectFill"
+            @click="goToLogin"
+          />
+          <view class="user-info-content">
+            <text class="nickname">未登录</text>
+            <text class="uid">点击登录后使用完整功能</text>
+          </view>
+          <view class="edit-btn" @click="goToLogin">
+            <text>去登录</text>
+          </view>
+        </view>
+      </view>
+
       <!-- 资产与功能导航 -->
       <view class="menu-list-container">
         <van-cell-group :border="false" class="custom-group">
@@ -56,12 +74,13 @@
 
         <van-cell-group :border="false" class="custom-group">
           <van-cell title="设置" icon="setting-o" is-link @click="goToSettings" />
+          <van-cell title="API 地址" icon="link-o" is-link @click="goToApiSettings" />
           <van-cell title="关于 VidSprout" icon="info-o" is-link @click="goToAbout" />
         </van-cell-group>
       </view>
 
       <!-- 退出登录 - 极简文字 -->
-      <view class="logout-wrapper">
+      <view class="logout-wrapper" v-if="userStore.isLoggedIn">
         <text class="logout-text" @click="handleLogout">退出登录</text>
       </view>
 
@@ -168,7 +187,12 @@ const handleScan = () => {
 }
 
 const handleAvatarClick = () => {
+  if (!ensureLogin()) return
   uni.navigateTo({ url: '/pages/user/edit' })
+}
+
+const goToLogin = () => {
+  uni.navigateTo({ url: '/pages/auth/login' })
 }
 
 const ensureLogin = () => {
@@ -211,6 +235,10 @@ const goToSettings = () => {
 
 const goToAbout = () => {
   uni.navigateTo({ url: '/pages/about/index' })
+}
+
+const goToApiSettings = () => {
+  uni.navigateTo({ url: '/pages/settings/api' })
 }
 
 const goToFollowing = () => {
