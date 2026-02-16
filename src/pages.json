@@ -49,6 +49,12 @@
       }
     },
     {
+      "path": "pages/settings/api",
+      "style": {
+        "navigationBarTitleText": "API 地址"
+      }
+    },
+    {
       "path": "pages/me/works",
       "style": {
         "navigationBarTitleText": "我的视频"

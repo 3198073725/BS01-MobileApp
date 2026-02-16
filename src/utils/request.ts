@@ -29,6 +29,8 @@ const resolveBaseUrl = (): string => {
   // #endif
 }
 
+export const getBaseUrl = (): string => resolveBaseUrl()
+
 export const BASE_URL = resolveBaseUrl();
 
 export interface RequestConfig extends Omit<UniApp.RequestOptions, 'method'> {
@@ -92,6 +94,7 @@ const redirectToLoginOnce = () => {
 
 const request = <T = any>(config: RequestConfig): Promise<T> => {
   const token = uni.getStorageSync('token');
+  const baseUrl = resolveBaseUrl()
   
   const header = {
     ...config.header,
@@ -104,14 +107,14 @@ const request = <T = any>(config: RequestConfig): Promise<T> => {
 
   return new Promise((resolve, reject) => {
     uni.request({
-      url: `${BASE_URL}${config.url}`,
+      url: `${baseUrl}${config.url}`,
       method: config.method as any || 'GET',
       data: config.data,
       header,
       success: (res) => {
         if (res.statusCode >= 200 && res.statusCode < 300) {
           // 暂时拦截 /api/notifications/ 以适配 VidSprout 自己的通知逻辑或测试环境
-          if (config.url?.startsWith('/api/notifications/') && BASE_URL.includes('vidsprout.local')) {
+          if (config.url?.startsWith('/api/notifications/') && baseUrl.includes('vidsprout.local')) {
             if (!config.silent) {
               uni.showToast({
                 title: 'VidSprout',

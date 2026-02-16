@@ -70,6 +70,7 @@
               </picker>
             </template>
           </van-cell>
+          <van-cell title="API 地址" icon="link-o" is-link @click="goApiSettings" />
         </van-cell-group>
       </view>
 
@@ -165,6 +166,10 @@ onMounted(() => {
 const goEditProfile = () => {
   if (!ensureLogin()) return
   uni.navigateTo({ url: '/pages/user/edit' })
+}
+
+const goApiSettings = () => {
+  uni.navigateTo({ url: '/pages/settings/api' })
 }
 
 const onPrivacyChange = async (e: any) => {
