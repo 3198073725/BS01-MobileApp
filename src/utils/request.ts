@@ -1,6 +1,35 @@
-export const BASE_URL = 'http://mobile.bs01.local:8000';
-
 import { useUserStore } from '@/store/user'
+
+const resolveBaseUrl = (): string => {
+  // 允许通过本地存储覆盖，便于测试/灰度
+  try {
+    const override = uni.getStorageSync('api_base')
+    if (override && typeof override === 'string' && /^https?:\/\//i.test(override)) {
+      return override.replace(/\/$/, '')
+    }
+  } catch {}
+
+  // #ifdef H5
+  try {
+    const proto = (typeof window !== 'undefined' ? (window.location?.protocol || 'http:') : 'http:')
+    const host = (typeof window !== 'undefined' ? (window.location?.hostname || '127.0.0.1') : '127.0.0.1')
+    const apiHost = host.replace(/^(admin|web|mobile)\./, 'api.')
+    const port = (typeof window !== 'undefined' ? (window.location?.port || '') : '')
+    const isDefaultPort = !port || port === '80'
+    const apiPort = isDefaultPort ? '' : ':8000'
+    return `${proto}//${apiHost}${apiPort}`
+  } catch {
+    return 'http://127.0.0.1:8000'
+  }
+  // #endif
+
+  // #ifndef H5
+  // 小程序/APP 侧默认走 api 虚拟域名（按你的 hosts/网关策略调整）
+  return 'http://api.bs01.local'
+  // #endif
+}
+
+export const BASE_URL = resolveBaseUrl();
 
 export interface RequestConfig extends Omit<UniApp.RequestOptions, 'method'> {
   noAuth?: boolean;
