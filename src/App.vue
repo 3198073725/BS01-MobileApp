@@ -103,6 +103,18 @@ onLaunch(() => {
   console.log("App Launch");
   handleH5ResetPasswordDeepLink();
   initAuthState();
+  try {
+    const info = uni.getSystemInfoSync() as any;
+    const sbh = Number(info?.statusBarHeight || 0);
+    uni.setStorageSync('status_bar_height', sbh);
+    // #ifdef H5 || APP-PLUS
+    try {
+      if (typeof document !== 'undefined' && document.documentElement) {
+        document.documentElement.style.setProperty('--status-bar-height', `${sbh}px`);
+      }
+    } catch (e) {}
+    // #endif
+  } catch (e) {}
   
   // 初始化主题
   const savedTheme = uni.getStorageSync('theme') || 'light';
@@ -240,6 +252,17 @@ html[data-theme='dark'] .van-picker__toolbar, .dark-mode .van-picker__toolbar { 
 html[data-theme='dark'] .van-picker-column__item, .dark-mode .van-picker-column__item { color: var(--text-color) !important; }
 html[data-theme='dark'] .van-search, .dark-mode .van-search { background-color: transparent !important; }
 html[data-theme='dark'] .van-search__content, .dark-mode .van-search__content { background-color: var(--bg-color) !important; }
+
+/* APP 端：修复 fixed 顶部导航被状态栏遮挡 */
+/* #ifdef APP-PLUS */
+.van-nav-bar--fixed {
+  padding-top: var(--status-bar-height) !important;
+}
+
+.van-nav-bar--fixed::after {
+  top: var(--status-bar-height) !important;
+}
+/* #endif */
 
 /* 禁用原生滚动 */
 /* #ifdef H5 */

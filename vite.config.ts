@@ -16,6 +16,16 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     allowedHosts: ['mobile.bs01.local'],
+    proxy: {
+      '/api': {
+        target: 'http://api.bs01.local',
+        changeOrigin: true,
+      },
+      '/media': {
+        target: 'http://api.bs01.local',
+        changeOrigin: true,
+      },
+    },
   },
   resolve: {
     alias: {

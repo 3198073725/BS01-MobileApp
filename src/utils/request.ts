@@ -13,6 +13,14 @@ const resolveBaseUrl = (): string => {
   try {
     const proto = (typeof window !== 'undefined' ? (window.location?.protocol || 'http:') : 'http:')
     const host = (typeof window !== 'undefined' ? (window.location?.hostname || '127.0.0.1') : '127.0.0.1')
+    // H5 本地开发（HBuilderX / Vite dev server）下走同域，通过 vite.config.ts 的 proxy 转发，避免 CORS
+    if (host === 'localhost' || host === '127.0.0.1') {
+      const origin = (typeof window !== 'undefined' ? (window.location?.origin || '') : '')
+      if (origin) return String(origin).replace(/\/$/, '')
+      const port = (typeof window !== 'undefined' ? (window.location?.port || '') : '')
+      const suffix = port ? `:${port}` : ''
+      return `${proto}//${host}${suffix}`
+    }
     const apiHost = host.replace(/^(admin|web|mobile)\./, 'api.')
     const port = (typeof window !== 'undefined' ? (window.location?.port || '') : '')
     const isDefaultPort = !port || port === '80'

@@ -13,12 +13,17 @@
         <view class="group-title">接口地址</view>
         <van-cell-group :border="false" class="cell-group">
           <van-field
-            v-model="apiBase"
+            :value="apiBase"
             label="Base URL"
             placeholder="例如：https://api.bs01.local"
             clearable
             :border="false"
+            @input="onApiBaseInput"
           />
+          <view class="current">
+            <text class="current-label">当前生效：</text>
+            <text class="current-value">{{ effectiveBase }}</text>
+          </view>
           <view class="tips">
             <text class="tip-line">- 需要以 http:// 或 https:// 开头</text>
             <text class="tip-line">- 不要以 / 结尾（会自动处理）</text>
@@ -42,11 +47,22 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
+import { getBaseUrl } from '@/utils/request'
 
 const theme = ref(uni.getStorageSync('theme') || 'light')
 const apiBase = ref('')
 const testing = ref(false)
 const lastTestOk = ref<boolean | null>(null)
+const effectiveBase = ref('')
+
+const refreshEffectiveBase = () => {
+  try {
+    effectiveBase.value = getBaseUrl()
+  } catch {
+    effectiveBase.value = ''
+  }
+}
 
 const testStatus = computed(() => {
   if (testing.value) return '测试中...'
@@ -57,6 +73,16 @@ const testStatus = computed(() => {
 
 const goBack = () => {
   uni.navigateBack()
+}
+
+const onApiBaseInput = (e: any) => {
+  // 兼容不同端（H5/APP/小程序）及组件事件结构
+  const v = (typeof e === 'string')
+    ? e
+    : (typeof e?.detail === 'string'
+      ? e.detail
+      : (e?.detail?.value ?? e?.target?.value ?? ''))
+  apiBase.value = String(v)
 }
 
 const normalize = (v: string) => {
@@ -71,6 +97,19 @@ onMounted(() => {
   } catch {
     apiBase.value = ''
   }
+
+  refreshEffectiveBase()
+})
+
+onShow(() => {
+  try {
+    const current = uni.getStorageSync('api_base')
+    apiBase.value = typeof current === 'string' ? current : ''
+  } catch {
+    apiBase.value = ''
+  }
+
+  refreshEffectiveBase()
 })
 
 const save = () => {
@@ -87,6 +126,7 @@ const save = () => {
   try {
     uni.setStorageSync('api_base', v)
     apiBase.value = v
+    refreshEffectiveBase()
     uni.showToast({ title: '已保存', icon: 'none' })
   } catch {
     uni.showToast({ title: '保存失败', icon: 'none' })
@@ -98,6 +138,7 @@ const clear = () => {
     uni.removeStorageSync('api_base')
     apiBase.value = ''
     lastTestOk.value = null
+    refreshEffectiveBase()
     uni.showToast({ title: '已清除', icon: 'none' })
   } catch {
     uni.showToast({ title: '清除失败', icon: 'none' })
@@ -137,9 +178,10 @@ const testHealth = async () => {
       lastTestOk.value = false
       uni.showToast({ title: `失败：HTTP ${res.statusCode}`, icon: 'none' })
     }
-  } catch {
+  } catch (e: any) {
     lastTestOk.value = false
-    uni.showToast({ title: '网络连接失败', icon: 'none' })
+    const msg = String(e?.errMsg || e?.message || '').trim()
+    uni.showToast({ title: msg ? `网络连接失败：${msg}` : '网络连接失败', icon: 'none' })
   } finally {
     testing.value = false
   }
@@ -163,6 +205,10 @@ const testHealth = async () => {
   justify-content: space-between;
   background-color: var(--card-bg);
   border-bottom: 1px solid var(--border-color);
+  /* #ifdef APP-PLUS */
+  padding-top: var(--status-bar-height);
+  height: calc(88rpx + var(--status-bar-height));
+  /* #endif */
 }
 
 .back-btn {
@@ -204,6 +250,20 @@ const testHealth = async () => {
 
 .tips {
   padding: 8rpx 24rpx 18rpx;
+}
+
+.current {
+  padding: 14rpx 24rpx 0;
+}
+
+.current-label {
+  font-size: 22rpx;
+  color: var(--text-muted);
+}
+
+.current-value {
+  font-size: 22rpx;
+  color: var(--text-color);
 }
 
 .tip-line {

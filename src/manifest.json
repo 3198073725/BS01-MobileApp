@@ -9,6 +9,9 @@
     "usingComponents": true,
     "nvueCompiler": "uni-app",
     "compilerVersion": 3,
+    "android": {
+      "usesCleartextTraffic": true
+    },
     "splashscreen": {
       "alwaysShowBeforeRender": true,
       "waiting": true,
