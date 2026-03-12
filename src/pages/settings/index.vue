@@ -173,8 +173,9 @@ const goApiSettings = () => {
 }
 
 const onPrivacyChange = async (e: any) => {
-  const index = e.detail.value
-  const mode = privacyOptions[index].value
+  const index = Number(e?.detail?.value ?? e?.target?.value)
+  const mode = privacyOptions[index]?.value
+  if (!mode) return
   try {
     const res = await request({
       url: '/api/users/me/',
@@ -188,31 +189,35 @@ const onPrivacyChange = async (e: any) => {
 }
 
 const onAutoplayChange = (e: any) => {
-  const val = e.detail.value
+  const val = !!(e?.detail?.value ?? e?.target?.value)
   autoplay.value = val
   uni.setStorageSync('vp_autonext', val ? '1' : '0')
 }
 
 const onRateChange = (e: any) => {
-  const val = rateOptions[e.detail.value]
+  const idx = Number(e?.detail?.value ?? e?.target?.value)
+  const val = rateOptions[idx]
+  if (val === undefined) return
   playbackRate.value = val
   uni.setStorageSync('vp_rate', String(val))
 }
 
 const onResumeChange = (e: any) => {
-  const val = e.detail.value
+  const val = !!(e?.detail?.value ?? e?.target?.value)
   resumeEnabled.value = val
   uni.setStorageSync('vp_resume', val ? '1' : '0')
 }
 
 const onStartTabChange = (e: any) => {
-  const val = startTabOptions[e.detail.value].value
+  const idx = Number(e?.detail?.value ?? e?.target?.value)
+  const val = startTabOptions[idx]?.value
+  if (!val) return
   startTab.value = val
   uni.setStorageSync('home_default_tab', val)
 }
 
 const onDarkModeChange = (e: any) => {
-  const val = e.detail.value
+  const val = !!(e?.detail?.value ?? e?.target?.value)
   isDarkMode.value = val
   const newTheme = val ? 'dark' : 'light'
   uni.setStorageSync('theme', newTheme)

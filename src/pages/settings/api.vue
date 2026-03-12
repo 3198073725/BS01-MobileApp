@@ -12,14 +12,16 @@
       <view class="group">
         <view class="group-title">接口地址</view>
         <van-cell-group :border="false" class="cell-group">
-          <van-field
-            :value="apiBase"
-            label="Base URL"
-            placeholder="例如：https://api.bs01.local"
-            clearable
-            :border="false"
-            @input="onApiBaseInput"
-          />
+          <view class="native-field">
+            <view class="native-label">Base URL</view>
+            <input
+              class="native-input"
+              :value="apiBaseRaw"
+              placeholder="例如：https://117.72.192.70:8000"
+              placeholder-style="color: var(--text-muted);"
+              @input="onApiBaseNativeInput"
+            />
+          </view>
           <view class="current">
             <text class="current-label">当前生效：</text>
             <text class="current-value">{{ effectiveBase }}</text>
@@ -51,7 +53,7 @@ import { onShow } from '@dcloudio/uni-app'
 import { getBaseUrl } from '@/utils/request'
 
 const theme = ref(uni.getStorageSync('theme') || 'light')
-const apiBase = ref('')
+const apiBaseRaw = ref('')
 const testing = ref(false)
 const lastTestOk = ref<boolean | null>(null)
 const effectiveBase = ref('')
@@ -75,14 +77,10 @@ const goBack = () => {
   uni.navigateBack()
 }
 
-const onApiBaseInput = (e: any) => {
-  // 兼容不同端（H5/APP/小程序）及组件事件结构
-  const v = (typeof e === 'string')
-    ? e
-    : (typeof e?.detail === 'string'
-      ? e.detail
-      : (e?.detail?.value ?? e?.target?.value ?? ''))
-  apiBase.value = String(v)
+const onApiBaseNativeInput = (e: any) => {
+  // 原生 input 在 uni-app 下统一从 e.detail.value 取值
+  const v = e?.detail?.value
+  apiBaseRaw.value = v === undefined || v === null ? '' : String(v)
 }
 
 const normalize = (v: string) => {
@@ -93,9 +91,9 @@ const normalize = (v: string) => {
 onMounted(() => {
   try {
     const current = uni.getStorageSync('api_base')
-    apiBase.value = typeof current === 'string' ? current : ''
+    apiBaseRaw.value = typeof current === 'string' ? current : ''
   } catch {
-    apiBase.value = ''
+    apiBaseRaw.value = ''
   }
 
   refreshEffectiveBase()
@@ -104,16 +102,16 @@ onMounted(() => {
 onShow(() => {
   try {
     const current = uni.getStorageSync('api_base')
-    apiBase.value = typeof current === 'string' ? current : ''
+    apiBaseRaw.value = typeof current === 'string' ? current : ''
   } catch {
-    apiBase.value = ''
+    apiBaseRaw.value = ''
   }
 
   refreshEffectiveBase()
 })
 
 const save = () => {
-  const v = normalize(apiBase.value)
+  const v = normalize(apiBaseRaw.value)
   if (!v) {
     uni.showToast({ title: '请输入 API 地址', icon: 'none' })
     return
@@ -125,7 +123,7 @@ const save = () => {
 
   try {
     uni.setStorageSync('api_base', v)
-    apiBase.value = v
+    apiBaseRaw.value = v
     refreshEffectiveBase()
     uni.showToast({ title: '已保存', icon: 'none' })
   } catch {
@@ -136,7 +134,7 @@ const save = () => {
 const clear = () => {
   try {
     uni.removeStorageSync('api_base')
-    apiBase.value = ''
+    apiBaseRaw.value = ''
     lastTestOk.value = null
     refreshEffectiveBase()
     uni.showToast({ title: '已清除', icon: 'none' })
@@ -146,7 +144,7 @@ const clear = () => {
 }
 
 const testHealth = async () => {
-  const base = normalize(apiBase.value)
+  const base = normalize(apiBaseRaw.value)
   const url = base ? `${base}/api/health/` : ''
 
   if (!url) {
@@ -246,6 +244,28 @@ const testHealth = async () => {
   border-radius: 18rpx;
   overflow: hidden;
   background-color: var(--card-bg) !important;
+}
+
+.native-field {
+  padding: 18rpx 24rpx 10rpx;
+}
+
+.native-label {
+  font-size: 24rpx;
+  color: var(--text-muted);
+  margin-bottom: 10rpx;
+}
+
+.native-input {
+  width: 100%;
+  height: 72rpx;
+  padding: 0 18rpx;
+  border-radius: 14rpx;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  font-size: 28rpx;
+  border: 1px solid var(--border-color);
+  box-sizing: border-box;
 }
 
 .tips {

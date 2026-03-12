@@ -1,17 +1,15 @@
 <template>
   <view :class="['login-container', theme]">
     <view class="content">
+      <view class="header">
+        <image class="logo" src="/static/logo-1.png" mode="aspectFill" />
+        <text class="title">VidSprout</text>
+        <text class="subtitle">登录后体验完整功能</text>
+      </view>
+
       <view class="login-type-tabs">
-        <text 
-          class="tab-item" 
-          :class="{ active: loginType === 'password' }"
-          @click="loginType = 'password'"
-        >密码登录</text>
-        <text 
-          class="tab-item" 
-          :class="{ active: loginType === 'captcha' }"
-          @click="loginType = 'captcha'"
-        >验证码登录</text>
+        <text class="tab-item" :class="{ active: loginType === 'password' }" @click="loginType = 'password'">密码登录</text>
+        <text class="tab-item" :class="{ active: loginType === 'captcha' }" @click="loginType = 'captcha'">验证码登录</text>
       </view>
 
       <view class="login-form">
@@ -19,54 +17,34 @@
         <template v-if="loginType === 'password'">
           <view class="input-item">
             <text class="label">用户名</text>
-            <van-field
-              v-model="username"
-              placeholder="请输入用户名"
-              :border="false"
-              class="custom-field"
-            />
+            <van-field :model-value="username" @update:model-value="onUsernameChange" placeholder="请输入用户名"
+              :border="false" class="custom-field" />
           </view>
-          
+
           <view class="input-item">
             <text class="label">密码</text>
-            <van-field
-              v-model="password"
-              type="password"
-              placeholder="请输入密码"
-              :border="false"
-              class="custom-field"
-            />
+            <van-field :model-value="password" @update:model-value="onPasswordChange" type="password"
+              placeholder="请输入密码" :border="false" class="custom-field" />
           </view>
         </template>
 
         <!-- 验证码登录表单 -->
         <template v-else>
-          <view class="login-tip">未注册邮箱验证后将自动登录</view>
+
           <view class="input-item">
             <text class="label">邮箱</text>
-            <van-field
-              v-model="email"
-              placeholder="请输入电子邮箱"
-              :border="false"
-              class="custom-field"
-            />
+            <view class="native-field">
+              <input class="native-input" :value="email" placeholder="请输入电子邮箱" @input="onEmailInput" />
+            </view>
           </view>
-          
+
           <view class="input-item">
             <text class="label">验证码</text>
             <view class="captcha-row">
-              <van-field
-                v-model="captcha"
-                placeholder="请输入验证码"
-                :border="false"
-                class="custom-field captcha-field"
-              />
-              <van-button 
-                size="small" 
-                class="send-btn"
-                :disabled="!!timer || !email.trim()"
-                @click="handleSendCaptcha"
-              >
+              <view class="native-field captcha-field">
+                <input class="native-input" :value="captcha" placeholder="请输入验证码" @input="onCaptchaInput" />
+              </view>
+              <van-button size="small" class="send-btn" :disabled="!canSendCaptcha" @click="handleSendCaptcha">
                 {{ timer ? `${countdown}s 后重发` : '获取验证码' }}
               </van-button>
             </view>
@@ -74,19 +52,13 @@
         </template>
 
         <view class="actions">
-          <van-button 
-            type="primary" 
-            block 
-            round 
-            @click="handleLogin" 
-            :loading="loading"
-            class="submit-btn"
-          >
+          <van-button type="primary" block round @click="handleLogin" :loading="loading" class="submit-btn">
             进入系统
           </van-button>
-          
+
           <view class="footer-links">
             <text class="link gray" @click="goToForgot">找回密码</text>
+            <view class="login-tip">未注册邮箱验证后将自动登录</view>
           </view>
         </view>
       </view>
@@ -95,7 +67,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import request from '@/utils/request'
 import { useUserStore } from '@/store/user'
 
@@ -122,9 +94,35 @@ const timer = ref<any>(null)
 const countdown = ref(60)
 const userStore = useUserStore()
 
+const onUsernameChange = (v: any) => {
+  username.value = v === undefined || v === null ? '' : String(v)
+}
+
+const onPasswordChange = (v: any) => {
+  password.value = v === undefined || v === null ? '' : String(v)
+}
+
+const onEmailInput = (e: any) => {
+  const v = e?.detail?.value
+  email.value = v === undefined || v === null ? '' : String(v)
+}
+
+const onCaptchaInput = (e: any) => {
+  const v = e?.detail?.value
+  captcha.value = v === undefined || v === null ? '' : String(v)
+}
+
+const canSendCaptcha = computed(() => {
+  if (!!timer.value) return false
+  const v = String(email.value || '').trim()
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  return !!v && emailRegex.test(v)
+})
+
 const handleSendCaptcha = async () => {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-  if (!email.value.trim() || !emailRegex.test(email.value.trim())) {
+  const mail = String(email.value || '').trim()
+  if (!mail || !emailRegex.test(mail)) {
     return uni.showToast({ title: '请输入有效的邮箱', icon: 'none' })
   }
 
@@ -132,11 +130,11 @@ const handleSendCaptcha = async () => {
     await request({
       url: '/api/users/login/send-code/', // 修正为后端实际接口路径
       method: 'POST',
-      data: { email: email.value.trim() },
+      data: { email: mail },
       noAuth: true
     })
     uni.showToast({ title: '验证码已发送', icon: 'success' })
-    
+
     // 启动倒计时
     countdown.value = 60
     timer.value = setInterval(() => {
@@ -147,7 +145,7 @@ const handleSendCaptcha = async () => {
         timer.value = null
       }
     }, 1000)
-  } catch (err) {}
+  } catch (err) { }
 }
 
 const handleLogin = async () => {
@@ -162,10 +160,11 @@ const handleLogin = async () => {
   } else {
     // 验证码登录验证
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!email.value.trim() || !emailRegex.test(email.value.trim())) {
+    const mail = String(email.value || '').trim()
+    if (!mail || !emailRegex.test(mail)) {
       return uni.showToast({ title: '请输入有效的邮箱', icon: 'none' })
     }
-    if (!captcha.value.trim()) {
+    if (!String(captcha.value || '').trim()) {
       return uni.showToast({ title: '请输入验证码', icon: 'none' })
     }
   }
@@ -175,28 +174,28 @@ const handleLogin = async () => {
     const loginData: any = {
       login_type: loginType.value
     }
-    
+
     if (loginType.value === 'password') {
       loginData.username = username.value.trim()
       loginData.password = password.value
     } else {
-      loginData.email = email.value.trim()
-      loginData.code = captcha.value.trim() // 修正参数名为 code
+      loginData.email = String(email.value || '').trim()
+      loginData.code = String(captcha.value || '').trim() // 修正参数名为 code
     }
 
     const res = await request({
-      url: loginType.value === 'password' ? '/api/token/' : '/api/users/login/with-code/', 
+      url: loginType.value === 'password' ? '/api/token/' : '/api/users/login/with-code/',
       method: 'POST',
       data: loginData,
       noAuth: true
     })
-    
+
     if (res.access) {
       userStore.setToken(res.access)
       // 获取用户信息
       const userInfo = await request({ url: '/api/users/me/' })
       userStore.setUserInfo(userInfo)
-      
+
       uni.showToast({ title: '登录成功', icon: 'success' })
       setTimeout(() => {
         uni.switchTab({ url: '/pages/index/index' })
@@ -220,19 +219,37 @@ const goToForgot = () => {
 .login-container {
   min-height: 100vh;
   background-color: var(--bg-color);
-  padding: 0 40rpx;
+  padding: 0 32rpx;
+  display: flex;
+  justify-content: center;
 }
 
 .content {
-  padding-top: calc(var(--status-bar-height) + 60rpx);
+  width: 100%;
+  max-width: 680rpx;
+  padding-top: calc(var(--status-bar-height) + 40rpx);
+  padding-bottom: 60rpx;
 }
 
 .header {
-  margin-bottom: 56rpx;
+  margin-bottom: 36rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.logo {
+  width: 104rpx;
+  height: 104rpx;
+  border-radius: 26rpx;
+  margin-bottom: 22rpx;
+  background-color: var(--card-bg);
+  box-shadow: 0 10rpx 24rpx rgba(0, 0, 0, 0.10);
 }
 
 .title {
-  font-size: 52rpx;
+  font-size: 46rpx;
   font-weight: 700;
   color: var(--text-color);
   display: block;
@@ -240,17 +257,18 @@ const goToForgot = () => {
 }
 
 .subtitle {
-  font-size: 26rpx;
+  font-size: 24rpx;
   color: var(--text-muted);
-  margin-top: 14rpx;
+  margin-top: 10rpx;
   display: block;
 }
 
 .login-type-tabs {
   display: flex;
-  gap: 40rpx;
-  margin-bottom: 32rpx;
-  padding: 0 10rpx;
+  gap: 48rpx;
+  margin-bottom: 28rpx;
+  justify-content: center;
+  padding: 0;
 }
 
 .tab-item {
@@ -281,15 +299,14 @@ const goToForgot = () => {
 .login-tip {
   font-size: 22rpx;
   color: var(--text-muted);
-  margin-bottom: 24rpx;
-  padding: 0 10rpx;
+  padding: 5rpx 0;
 }
 
 .login-form {
   background-color: var(--card-bg);
   border-radius: 20rpx;
   padding: 44rpx 40rpx;
-  box-shadow: 0 10rpx 30rpx rgba(0, 0, 0, 0.06);
+  box-shadow: 0 16rpx 40rpx rgba(0, 0, 0, 0.08);
 }
 
 .input-item {
@@ -308,6 +325,18 @@ const goToForgot = () => {
   background-color: var(--bg-color) !important;
   border-radius: 14rpx !important;
   padding: 20rpx 22rpx !important;
+}
+
+.native-field {
+  background-color: var(--bg-color);
+  border-radius: 14rpx;
+  padding: 20rpx 22rpx;
+}
+
+.native-input {
+  width: 100%;
+  font-size: 28rpx;
+  color: var(--text-color);
 }
 
 :deep(.custom-field .van-field__control) {
@@ -340,7 +369,7 @@ const goToForgot = () => {
 }
 
 .actions {
-  margin-top: 44rpx;
+  margin-top: 36rpx;
 }
 
 .submit-btn {

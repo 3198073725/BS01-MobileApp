@@ -15,7 +15,7 @@
           <image class="cover" :src="formatImageUrl(v)" mode="aspectFill" />
           <view class="edit-tag" v-if="!isManageMode" @click.stop="goEdit(v.id)">编辑</view>
           <view class="select-mask" v-if="isManageMode">
-            <van-checkbox :value="isSelected(v.id)" @change="toggleSelect(v.id)" color="#fb7299" />
+            <van-checkbox :model-value="isSelected(v.id)" @update:model-value="() => toggleSelect(v.id)" color="#fb7299" />
           </view>
           <view class="play-count">
             <van-icon name="play-circle-o" color="#fff" size="12px" />
@@ -41,7 +41,7 @@
     <!-- 底部管理栏 -->
     <view class="manage-bar" v-if="isManageMode">
       <view class="bar-left" @click="toggleSelectAll">
-        <van-checkbox :value="isAllSelected" color="#fb7299" />
+        <van-checkbox :model-value="isAllSelected" color="#fb7299" />
         <text class="bar-text">全选</text>
       </view>
       <view class="bar-right">
@@ -89,6 +89,16 @@ onUnmounted(() => {
 onMounted(() => {
   uni.$on('menu:theme-change', onThemeChange)
   fetchList(true)
+})
+
+onShow(() => {
+  try {
+    const flag = uni.getStorageSync('works_refresh')
+    if (flag) {
+      uni.removeStorageSync('works_refresh')
+      fetchList(true)
+    }
+  } catch { }
 })
 
 const items = ref<any[]>([])
@@ -255,18 +265,12 @@ const statusText = (v: any) => {
     if (vis === 'unlisted') return '不公开'
     return '已发布'
   }
+  if (s === 'processing') return '处理中'
+  if (s === 'draft') return '草稿'
+  if (s === 'banned') return '已下架'
   if (s) return s
   return '视频'
 }
-
-onMounted(() => {
-  fetchList(true)
-})
-
-onShow(() => {
-  if (!userStore.isLoggedIn) return
-  if (!items.value.length) fetchList(true)
-})
 
 onPullDownRefresh(() => {
   fetchList(true)

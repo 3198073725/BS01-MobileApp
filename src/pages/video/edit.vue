@@ -33,12 +33,12 @@
 
         <view class="form-item">
           <text class="label">允许评论</text>
-          <switch :checked="allowComments" @change="(e:any)=>allowComments = !!e.detail.value" color="#1989fa" />
+          <switch :checked="allowComments" @change="(e:any)=>allowComments = !!(e?.detail?.value ?? e?.target?.value)" color="#1989fa" />
         </view>
 
         <view class="form-item">
           <text class="label">允许下载</text>
-          <switch :checked="allowDownload" @change="(e:any)=>allowDownload = !!e.detail.value" color="#1989fa" />
+          <switch :checked="allowDownload" @change="(e:any)=>allowDownload = !!(e?.detail?.value ?? e?.target?.value)" color="#1989fa" />
         </view>
 
         <view class="form-item">
@@ -125,7 +125,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import request, { BASE_URL } from '@/utils/request'
+import request, { getBaseUrl } from '@/utils/request'
 import { useUserStore } from '@/store/user'
 
 const userStore = useUserStore()
@@ -371,8 +371,9 @@ const uploadCover = async () => {
       if (!path) return
 
       const token = uni.getStorageSync('token')
+      const baseUrl = getBaseUrl().replace(/\/$/, '')
       uni.uploadFile({
-        url: `${BASE_URL.replace(/\/$/, '')}/api/videos/${encodeURIComponent(vid.value)}/thumbnail/upload/`,
+        url: `${baseUrl}/api/videos/${encodeURIComponent(vid.value)}/thumbnail/upload/`,
         filePath: path,
         name: 'file',
         header: {

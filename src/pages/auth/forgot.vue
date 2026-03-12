@@ -19,7 +19,8 @@
           <view class="input-item">
             <text class="label">邮箱</text>
             <van-field
-              v-model="email"
+              :model-value="email"
+              @update:model-value="onEmailChange"
               placeholder="请输入注册邮箱"
               :border="false"
               class="custom-field"
@@ -46,7 +47,8 @@
           <view class="input-item">
             <text class="label">UID</text>
             <van-field
-              v-model="uid"
+              :model-value="uid"
+              @update:model-value="onUidChange"
               placeholder="从邮件链接中复制 uid"
               :border="false"
               class="custom-field"
@@ -56,7 +58,8 @@
           <view class="input-item">
             <text class="label">Token</text>
             <van-field
-              v-model="token"
+              :model-value="token"
+              @update:model-value="onTokenChange"
               placeholder="从邮件链接中复制 token"
               :border="false"
               class="custom-field"
@@ -66,7 +69,8 @@
           <view class="input-item">
             <text class="label">新密码</text>
             <van-field
-              v-model="newPassword"
+              :model-value="newPassword"
+              @update:model-value="onNewPasswordChange"
               type="password"
               placeholder="请输入新密码"
               :border="false"
@@ -77,7 +81,8 @@
           <view class="input-item">
             <text class="label">确认新密码</text>
             <van-field
-              v-model="confirmPassword"
+              :model-value="confirmPassword"
+              @update:model-value="onConfirmPasswordChange"
               type="password"
               placeholder="请再次输入新密码"
               :border="false"
@@ -133,6 +138,26 @@ const uid = ref('')
 const token = ref('')
 const newPassword = ref('')
 const confirmPassword = ref('')
+
+const onEmailChange = (v: any) => {
+  email.value = v === undefined || v === null ? '' : String(v)
+}
+
+const onUidChange = (v: any) => {
+  uid.value = v === undefined || v === null ? '' : String(v)
+}
+
+const onTokenChange = (v: any) => {
+  token.value = v === undefined || v === null ? '' : String(v)
+}
+
+const onNewPasswordChange = (v: any) => {
+  newPassword.value = v === undefined || v === null ? '' : String(v)
+}
+
+const onConfirmPasswordChange = (v: any) => {
+  confirmPassword.value = v === undefined || v === null ? '' : String(v)
+}
 
 const sending = ref(false)
 const submitting = ref(false)

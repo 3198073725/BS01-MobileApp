@@ -14,7 +14,7 @@
         <view class="cover-wrap">
           <image class="cover" :src="formatImageUrl(v)" mode="aspectFill" />
           <view class="select-mask" v-if="isManageMode">
-            <van-checkbox :value="isSelected(v.id)" @change="toggleSelect(v.id)" color="#fb7299" />
+            <van-checkbox :model-value="isSelected(v.id)" @update:model-value="() => toggleSelect(v.id)" color="#fb7299" />
           </view>
           <view class="play-count">
             <van-icon name="play-circle-o" color="#fff" size="12px" />
@@ -34,7 +34,7 @@
     <!-- 底部管理栏 -->
     <view class="manage-bar" v-if="isManageMode">
       <view class="bar-left" @click="toggleSelectAll">
-        <van-checkbox :value="isAllSelected" color="#fb7299" />
+        <van-checkbox :model-value="isAllSelected" color="#fb7299" />
         <text class="bar-text">全选</text>
       </view>
       <view class="bar-right">

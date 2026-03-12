@@ -2,60 +2,44 @@
   <view :class="['profile-container', theme]">
     <scroll-view scroll-y class="body-scroll">
       <!-- 用户核心信息区 - 纯净白色 -->
-      <view class="user-header-section" v-if="userStore.userInfo">
+      <view class="user-header-section">
         <view class="top-ops">
           <view class="scan-btn" @click="handleScan">
-            <van-icon name="scan" size="24px" :color="theme === 'dark' ? '#e3e5e7' : '#18191c'" />
+            <van-icon v-if="userStore.isLoggedIn" name="scan" size="24px" :color="theme === 'dark' ? '#e3e5e7' : '#18191c'" />
           </view>
         </view>
         <view class="user-main">
           <image
+            v-if="userStore.userInfo"
             class="avatar"
             :src="formatImageUrl(userStore.userInfo)"
             mode="aspectFill"
             @error="handleAvatarError"
             @click="handleAvatarClick"
           />
+          <image v-else class="avatar" src="/static/logo.png" mode="aspectFill" @click="goToLogin" />
           <view class="user-info-content">
-            <text class="nickname">{{ userStore.userInfo.nickname || userStore.userInfo.username }}</text>
-            <text class="uid">ID: {{ userStore.userInfo.username }}</text>
+            <text class="nickname">{{ userStore.userInfo?.nickname || userStore.userInfo?.username || '未登录' }}</text>
+            <text class="uid">{{ userStore.userInfo?.username ? `ID: ${userStore.userInfo.username}` : '点击登录后使用完整功能' }}</text>
           </view>
-          <view class="edit-btn" @click="handleAvatarClick">
-            <text>编辑资料</text>
+          <view class="edit-btn" @click="userStore.isLoggedIn ? handleAvatarClick() : goToLogin()">
+            <text>{{ userStore.isLoggedIn ? '编辑资料' : '去登录' }}</text>
           </view>
         </view>
 
         <!-- 社交数据统计 -->
         <view class="social-stats">
           <view class="stat-box">
-            <text class="num">{{ profileStats.liked_count }}</text>
+            <text class="num">{{ userStore.isLoggedIn ? profileStats.liked_count : 0 }}</text>
             <text class="label">获赞</text>
           </view>
           <view class="stat-box" @click="goToFollowing">
-            <text class="num">{{ profileStats.following_count }}</text>
+            <text class="num">{{ userStore.isLoggedIn ? profileStats.following_count : 0 }}</text>
             <text class="label">关注</text>
           </view>
           <view class="stat-box" @click="goToFollowers">
-            <text class="num">{{ profileStats.followers_count }}</text>
+            <text class="num">{{ userStore.isLoggedIn ? profileStats.followers_count : 0 }}</text>
             <text class="label">粉丝</text>
-          </view>
-        </view>
-      </view>
-
-      <view class="user-header-section" v-else>
-        <view class="user-main">
-          <image
-            class="avatar"
-            src="/static/logo.png"
-            mode="aspectFill"
-            @click="goToLogin"
-          />
-          <view class="user-info-content">
-            <text class="nickname">未登录</text>
-            <text class="uid">点击登录后使用完整功能</text>
-          </view>
-          <view class="edit-btn" @click="goToLogin">
-            <text>去登录</text>
           </view>
         </view>
       </view>
@@ -86,6 +70,20 @@
 
       <view class="scroll-spacer"></view>
     </scroll-view>
+
+    <van-popup v-model:show="showLoginPopup" round :close-on-click-overlay="true">
+      <view class="login-popup">
+        <view class="login-popup__icon">
+          <van-icon name="lock" size="22px" color="#ffffff" />
+        </view>
+        <text class="login-popup__title">需要登录</text>
+        <text class="login-popup__desc">登录后才能使用{{ loginPopupFeatureLabel }}</text>
+        <view class="login-popup__actions">
+          <van-button block plain round type="default" class="login-popup__btn" @click="onLoginPopupCancel">先看看</van-button>
+          <van-button block round type="primary" class="login-popup__btn" @click="onLoginPopupConfirm">去登录</van-button>
+        </view>
+      </view>
+    </van-popup>
   </view>
 </template>
 
@@ -94,7 +92,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useUserStore } from '@/store/user'
 import { formatImageUrl } from '@/utils/image'
-import request, { BASE_URL } from '@/utils/request'
+import request from '@/utils/request'
 
 const userStore = useUserStore()
 const theme = ref(uni.getStorageSync('theme') || 'light')
@@ -108,6 +106,9 @@ const profileStats = ref({
 const onThemeChange = (t: string) => {
   theme.value = t
 }
+
+const showLoginPopup = ref(false)
+const loginPopupFeatureLabel = ref('')
 
 onMounted(() => {
   uni.$on('menu:theme-change', onThemeChange)
@@ -145,7 +146,7 @@ const handleScan = () => {
     success: async (res) => {
       console.log('扫码结果：', res.result)
       const scanResult = res.result || ''
-      
+
       // 解析 session 参数
       let session = ''
       if (scanResult.includes('session=')) {
@@ -195,41 +196,49 @@ const goToLogin = () => {
   uni.navigateTo({ url: '/pages/auth/login' })
 }
 
-const ensureLogin = () => {
-  if (!userStore.isLoggedIn) {
-    uni.navigateTo({ url: '/pages/auth/login' })
-    return false
-  }
-  return true
+const ensureLogin = (featureLabel = '该功能') => {
+  if (userStore.isLoggedIn) return true
+  loginPopupFeatureLabel.value = featureLabel
+  showLoginPopup.value = true
+  return false
+}
+
+const onLoginPopupCancel = () => {
+  showLoginPopup.value = false
+}
+
+const onLoginPopupConfirm = () => {
+  showLoginPopup.value = false
+  goToLogin()
 }
 
 const goToMeWorks = () => {
-  if (!ensureLogin()) return
+  if (!ensureLogin('我的视频')) return
   uni.navigateTo({ url: '/pages/me/works' })
 }
 
 const goToMeFavorites = () => {
-  if (!ensureLogin()) return
+  if (!ensureLogin('我的收藏')) return
   uni.navigateTo({ url: '/pages/me/favorites' })
 }
 
 const goToMeLikes = () => {
-  if (!ensureLogin()) return
+  if (!ensureLogin('点赞记录')) return
   uni.navigateTo({ url: '/pages/me/likes' })
 }
 
 const goToMeHistory = () => {
-  if (!ensureLogin()) return
+  if (!ensureLogin('观看历史')) return
   uni.navigateTo({ url: '/pages/me/history' })
 }
 
 const goToMeWatchLater = () => {
-  if (!ensureLogin()) return
+  if (!ensureLogin('稍后再看')) return
   uni.navigateTo({ url: '/pages/me/watch-later' })
 }
 
 const goToSettings = () => {
-  if (!ensureLogin()) return
+  if (!ensureLogin('设置')) return
   uni.navigateTo({ url: '/pages/settings/index' })
 }
 
@@ -242,25 +251,13 @@ const goToApiSettings = () => {
 }
 
 const goToFollowing = () => {
-  if (!ensureLogin()) return
+  if (!ensureLogin('关注')) return
   uni.navigateTo({ url: `/pages/user/following?id=${userStore.userInfo?.id}` })
 }
 
 const goToFollowers = () => {
-  if (!ensureLogin()) return
+  if (!ensureLogin('粉丝')) return
   uni.navigateTo({ url: `/pages/user/followers?id=${userStore.userInfo?.id}` })
-}
-
-const getAvatarUrl = (url?: string) => {
-  if (!url) return '/static/logo.png'
-  const base = BASE_URL.replace(/\/$/, '')
-  // 如果是绝对路径
-  if (/^https?:\/\//i.test(url)) return url
-  // 统一去除开头的斜杠
-  const rel = String(url).replace(/^\/+/, '')
-  // 仿照 Web 端逻辑，确保包含 media/ 前缀
-  const path = rel.startsWith('media/') ? rel : `media/${rel}`
-  return `${base}/${path}`
 }
 
 const handleAvatarError = () => {
@@ -277,7 +274,7 @@ const handleLogout = () => {
     success: (res) => {
       if (res.confirm) {
         userStore.logout()
-        uni.reLaunch({ url: '/pages/auth/login' })
+        uni.switchTab({ url: '/pages/index/index' })
       }
     }
   })
@@ -285,6 +282,59 @@ const handleLogout = () => {
 </script>
 
 <style scoped>
+.login-popup {
+  width: 620rpx;
+  padding: 40rpx 36rpx 32rpx;
+  box-sizing: border-box;
+  background-color: var(--card-bg);
+}
+
+.login-popup__icon {
+  width: 88rpx;
+  height: 88rpx;
+  border-radius: 44rpx;
+  background: linear-gradient(135deg, #1989fa, #4facfe);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 6rpx auto 22rpx;
+}
+
+.login-popup__title {
+  display: block;
+  text-align: center;
+  font-size: 34rpx;
+  font-weight: 700;
+  color: var(--text-color);
+  margin-bottom: 14rpx;
+}
+
+.login-popup__desc {
+  display: block;
+  text-align: center;
+  font-size: 26rpx;
+  line-height: 1.6;
+  color: var(--text-muted);
+  margin-bottom: 28rpx;
+}
+
+.login-popup__actions {
+  display: flex;
+  gap: 18rpx;
+}
+
+.login-popup__btn {
+  flex: 1;
+}
+
+:deep(.van-popup) {
+  background: transparent;
+}
+
+:deep(.van-button) {
+  height: 80rpx;
+}
+
 .profile-container {
   height: 100vh;
   background-color: var(--bg-color);
@@ -305,6 +355,7 @@ const handleLogout = () => {
 
 .user-header-section {
   background-color: var(--card-bg);
+  border-radius: 40rpx;
   padding: 20rpx 40rpx 52rpx;
   border-bottom-left-radius: 24rpx;
   border-bottom-right-radius: 24rpx;
@@ -372,17 +423,15 @@ const handleLogout = () => {
 
 .social-stats {
   display: flex;
-  justify-content: flex-start;
-  gap: 72rpx;
-  padding-left: 4rpx;
+  justify-content: space-between;
+  width: 100%;
 }
 
 .stat-box {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4rpx;
-  min-width: 80rpx;
 }
 
 .num {

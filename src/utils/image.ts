@@ -1,4 +1,4 @@
-import { BASE_URL } from './request'
+import { getBaseUrl } from './request'
 
 /**
  * 统一处理图片/头像 URL 格式化逻辑 (对齐 Web 端逻辑)
@@ -7,7 +7,7 @@ import { BASE_URL } from './request'
  */
 export const formatImageUrl = (source?: string | any): string => {
   if (!source) return '/static/logo.png'
-  
+
   let url = ''
   if (typeof source === 'string') {
     url = source
@@ -18,17 +18,20 @@ export const formatImageUrl = (source?: string | any): string => {
   }
 
   if (!url) return '/static/logo.png'
-  
-  const base = BASE_URL.replace(/\/$/, '')
-  
+
+  // 如果是本地静态文件路径（以 /static/ 开头），直接返回
+  if (url.startsWith('/static/')) return url
+
+  const base = getBaseUrl().replace(/\/$/, '')
+
   // 如果已经是完整路径
   if (/^https?:\/\//i.test(url)) return url
-  
+
   // 统一去除开头的斜杠
   const rel = String(url).replace(/^\/+/, '')
-  
+
   // 如果路径中已经包含 media/，则不再重复添加 (对齐 Web 端 buildAvatarUrl 逻辑)
   const path = rel.includes('media/') ? rel : `media/${rel}`
-  
+
   return `${base}/${path}`
 }

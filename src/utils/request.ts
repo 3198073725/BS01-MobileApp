@@ -7,7 +7,7 @@ const resolveBaseUrl = (): string => {
     if (override && typeof override === 'string' && /^https?:\/\//i.test(override)) {
       return override.replace(/\/$/, '')
     }
-  } catch {}
+  } catch { }
 
   // #ifdef H5
   try {
@@ -33,13 +33,11 @@ const resolveBaseUrl = (): string => {
 
   // #ifndef H5
   // 小程序/APP 侧默认走 api 虚拟域名（按你的 hosts/网关策略调整）
-  return 'http://api.bs01.local'
+  return 'http://117.72.192.70:8000'
   // #endif
 }
 
 export const getBaseUrl = (): string => resolveBaseUrl()
-
-export const BASE_URL = resolveBaseUrl();
 
 export interface RequestConfig extends Omit<UniApp.RequestOptions, 'method'> {
   noAuth?: boolean;
@@ -52,6 +50,8 @@ export interface ApiResponse<T = any> {
   message: string;
   data: T;
 }
+
+let shownApiBaseHint = false
 
 const extractErrorMessage = (resData: any): string => {
   if (!resData) return '请求错误，请稍后再试';
@@ -78,7 +78,7 @@ const extractErrorMessage = (resData: any): string => {
       if (Array.isArray(v) && v.length) return String(v[0]);
       if (typeof v === 'string') return v;
     }
-  } catch {}
+  } catch { }
 
   return '请求错误，请稍后再试';
 }
@@ -92,7 +92,7 @@ const redirectToLoginOnce = () => {
     const pages = getCurrentPages?.() as any[]
     const currentRoute = pages?.[pages.length - 1]?.route || ''
     if (currentRoute === 'pages/auth/login') return
-  } catch {}
+  } catch { }
 
   uni.reLaunch({ url: '/pages/auth/login' })
   setTimeout(() => {
@@ -103,7 +103,7 @@ const redirectToLoginOnce = () => {
 const request = <T = any>(config: RequestConfig): Promise<T> => {
   const token = uni.getStorageSync('token');
   const baseUrl = resolveBaseUrl()
-  
+
   const header = {
     ...config.header,
     'Content-Type': 'application/json',
@@ -159,7 +159,7 @@ const request = <T = any>(config: RequestConfig): Promise<T> => {
 
           const rawError = extractErrorMessage(resData);
           const errorMsg = errorMap[rawError] || rawError;
-          
+
           if (res.statusCode === 401 || res.statusCode === 403) {
             // 如果是登录页面发起的请求 (noAuth 为 true)，或者是获取 token 的接口，不执行跳转，只弹出提示
             if (config.noAuth || config.url === '/api/token/') {
@@ -193,6 +193,20 @@ const request = <T = any>(config: RequestConfig): Promise<T> => {
         }
       },
       fail: (err) => {
+        try {
+          const override = uni.getStorageSync('api_base')
+          const errMsg = String((err as any)?.errMsg || '')
+          const isResolveHost = /Unable\s+to\s+resolve\s+host/i.test(errMsg)
+          const hasOverride = !!(override && typeof override === 'string' && /^https?:\/\//i.test(override))
+          if (!shownApiBaseHint && isResolveHost && !hasOverride && /\.local\b/i.test(baseUrl)) {
+            shownApiBaseHint = true
+            uni.showToast({
+              title: '接口域名无法解析，请到【设置-API地址】改为手机可访问的IP/域名',
+              icon: 'none',
+              duration: 3000,
+            })
+          }
+        } catch { }
         if (!config.silent) {
           uni.showToast({
             title: '网络连接失败',

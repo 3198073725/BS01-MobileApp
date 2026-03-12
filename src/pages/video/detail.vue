@@ -196,7 +196,8 @@
     >
       <view class="popup-input-wrap">
         <van-field
-          v-model="commentContent"
+          :model-value="commentContent"
+          @update:model-value="onCommentContentChange"
           type="textarea"
           :placeholder="replyTarget ? `回复 @${replyTarget.user?.nickname || replyTarget.user?.username}` : '发条友善的评论吧'"
           autosize
@@ -211,7 +212,7 @@
             round 
             :loading="submitting"
             @click="submitComment"
-            :disabled="!commentContent.trim()"
+            :disabled="!String(commentContent || '').trim()"
           >
             发布
           </van-button>
@@ -274,7 +275,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useUserStore } from '@/store/user'
 import { formatImageUrl } from '@/utils/image'
-import request, { BASE_URL } from '@/utils/request'
+import request, { getBaseUrl } from '@/utils/request'
 
 const theme = ref(uni.getStorageSync('theme') || 'light')
 const onThemeChange = (t: string) => {
@@ -311,6 +312,10 @@ const commentContent = ref('')
 const submitting = ref(false)
 const replyTarget = ref<any>(null)
 const replyRoot = ref<any>(null)
+
+const onCommentContentChange = (v: any) => {
+  commentContent.value = v === undefined || v === null ? '' : String(v)
+}
 
 const isOwner = computed(() => {
   return Boolean(videoDetail.value && userStore.userInfo && String(videoDetail.value?.author?.id || '') === String(userStore.userInfo.id))
@@ -354,7 +359,8 @@ const fetchComments = async (refresh = false) => {
         page_size: 20,
         order: commentSort.value === 'hot' ? 'hot' : '-created_at'
       },
-      noAuth: true
+      noAuth: true,
+      silent: true
     })
     
     const list = res.results || []
@@ -373,7 +379,14 @@ const fetchComments = async (refresh = false) => {
     } else {
       commentPage.value++
     }
-  } catch (err) {
+  } catch (err: any) {
+    // 视频未发布(如 processing/draft) 时，后端会返回 404(NotFound: 资源不存在)
+    // 这里不应打扰用户，直接当作暂无评论处理。
+    if (err?.statusCode === 404 || err?.status === 404) {
+      commentList.value = []
+      commentsFinished.value = true
+      return
+    }
     console.error('Fetch comments error:', err)
   } finally {
     commentsLoading.value = false
@@ -422,18 +435,22 @@ const togglePlay = () => {
 }
 
 const handleRateChange = (e: any) => {
-  const idx = e.detail.value
+  const idx = Number(e?.detail?.value ?? e?.target?.value)
+  if (!Number.isFinite(idx)) return
   rateIndex.value = idx
   const rate = parseFloat(rateOptions[idx])
+  if (!Number.isFinite(rate)) return
   playbackRate.value = rate
   videoContext.value = uni.createVideoContext('myVideo')
   videoContext.value.playbackRate(rate)
 }
 
 const handleQualityChange = (e: any) => {
-  const idx = e.detail.value
+  const idx = Number(e?.detail?.value ?? e?.target?.value)
+  if (!Number.isFinite(idx)) return
   qualityIndex.value = idx
   const option = qualityOptions.value[idx]
+  if (!option?.url) return
   
   // 记录当前播放时间，切换源后 seek 回去
   videoContext.value = uni.createVideoContext('myVideo')
@@ -485,24 +502,53 @@ const fetchVideoDetail = async () => {
     })
     videoDetail.value = res
     
-    // 初始化清晰度选项（对齐 Web 端逻辑）
-    const options = []
-    if (res.video_url) {
-      // 模拟多清晰度选项，实际生产环境应从后端返回的 HLS 列表或不同档位 URL 获取
-      options.push({ label: '1080P 超清', url: res.video_url })
-      options.push({ label: '720P 高清', url: res.video_url })
-      options.push({ label: '480P 清晰', url: res.video_url })
-      options.push({ label: '360P 流畅', url: res.video_url })
+    const options: any[] = []
+    const normalizeMediaUrl = (url?: string): string => {
+      if (!url) return ''
+      const u = String(url)
+      if (/^https?:\/\//i.test(u)) return u
+      if (/^blob:/i.test(u)) return u
+
+      const base = getBaseUrl().replace(/\/$/, '')
+      if (u.startsWith('/')) return `${base}${u}`
+      return `${base}/${u}`
     }
-    
+
+    const hls = normalizeMediaUrl((res as any)?.hls_master_url)
+    const low = normalizeMediaUrl((res as any)?.low_mp4_url)
+    const raw = normalizeMediaUrl((res as any)?.video_url)
+
+    const supportsHls = (() => {
+      try {
+        if (typeof document === 'undefined') return false
+        const v = document.createElement('video')
+        const t1 = v.canPlayType('application/vnd.apple.mpegurl')
+        const t2 = v.canPlayType('application/x-mpegURL')
+        return Boolean(t1 || t2)
+      } catch {
+        return false
+      }
+    })()
+
+    // H5 下大多数浏览器/Android WebView 不能直接播放 m3u8；优先 mp4
+    const canUseHls = supportsHls
+
+    if (hls && canUseHls) options.push({ label: '自动', url: hls })
+    if (low) options.push({ label: '流畅', url: low })
+    if (raw) options.push({ label: '原始', url: raw })
+
     qualityOptions.value = options
-    currentSrc.value = res.video_url
-    
-    // 如果有 HLS 地址，优先使用 HLS
-    if (res.hls_url) {
-      options.unshift({ label: '自动', url: res.hls_url })
-      currentSrc.value = res.hls_url
-    }
+    currentSrc.value = (hls && canUseHls) ? hls : (low || raw || '')
+
+    try {
+      console.info('[video] sources resolved', {
+        hls,
+        low,
+        raw,
+        supportsHls,
+        currentSrc: currentSrc.value,
+      })
+    } catch { }
     
     // 检查是否有预设倍速
     const savedRate = parseFloat(uni.getStorageSync('vp_rate'))
@@ -539,20 +585,26 @@ const fetchVideoDetail = async () => {
 const loadReplies = async (comment: any, p = 1) => {
   try {
     const res = await request({
-      url: '/api/interactions/comments/replies/',
+      url: `/api/interactions/comments/replies/`,
       data: {
         parent_id: comment.id,
         page: p,
         page_size: 10
       },
-      noAuth: true
+      noAuth: true,
+      silent: true
     })
     const list = res.results || []
     comment._replies = p === 1 ? list : [...(comment._replies || []), ...list]
     comment._repliesPage = p
     comment._repliesHasNext = !!res.next
-  } catch (err) {
-    console.error('Fetch replies error:', err)
+  } catch (err: any) {
+    if (err?.statusCode === 404 || err?.status === 404) {
+      comment._replies = []
+      comment._repliesHasNext = false
+      return
+    }
+    console.error('Load replies error:', err)
   }
 }
 
@@ -749,7 +801,8 @@ const handleCopyLink = () => {
   shareUrl = window.location.href
   // #endif
   // #ifndef H5
-  shareUrl = `${BASE_URL.replace(/\/$/, '')}/#/pages/video/detail?id=${videoId.value}`
+  const baseUrl = getBaseUrl().replace(/\/$/, '')
+  shareUrl = `${baseUrl}/#/pages/video/detail?id=${videoId.value}`
   // #endif
 
   uni.setClipboardData({
@@ -818,7 +871,36 @@ const goToUser = (id: string) => {
 }
 
 const onVideoError = (e: any) => {
-  console.error('Video error:', e)
+  try {
+    const elFromEvent: any = e?.currentTarget || e?.target
+    const domEl: any = (typeof document !== 'undefined') ? document.getElementById('myVideo') : null
+    const el: any = domEl || elFromEvent
+    const mediaErr = el?.error
+
+    let canPlay: any = null
+    try {
+      if (el?.canPlayType) {
+        canPlay = {
+          mp4: el.canPlayType('video/mp4'),
+          m3u8_1: el.canPlayType('application/vnd.apple.mpegurl'),
+          m3u8_2: el.canPlayType('application/x-mpegURL'),
+        }
+      }
+    } catch { }
+
+    console.error('Video error:', {
+      src: currentSrc.value,
+      elementSrc: el?.src,
+      elementCurrentSrc: el?.currentSrc,
+      networkState: el?.networkState,
+      readyState: el?.readyState,
+      canPlay,
+      error: mediaErr ? { code: mediaErr.code, message: mediaErr.message } : null,
+      event: e,
+    })
+  } catch {
+    console.error('Video error:', e)
+  }
   uni.showToast({ title: '播放失败', icon: 'none' })
 }
 

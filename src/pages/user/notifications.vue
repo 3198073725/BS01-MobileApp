@@ -86,6 +86,20 @@
         <text v-else-if="finished" class="no-more">没有更多了</text>
       </view>
     </scroll-view>
+
+    <van-popup v-model:show="showLoginPopup" round :close-on-click-overlay="true">
+      <view class="login-popup">
+        <view class="login-popup__icon">
+          <van-icon name="lock" size="22px" color="#ffffff" />
+        </view>
+        <text class="login-popup__title">需要登录</text>
+        <text class="login-popup__desc">登录后才能查看消息内容</text>
+        <view class="login-popup__actions">
+          <van-button block plain round type="default" class="login-popup__btn" @click="onLoginPopupCancel">先看看</van-button>
+          <van-button block round type="primary" class="login-popup__btn" @click="onLoginPopupConfirm">去登录</van-button>
+        </view>
+      </view>
+    </van-popup>
   </view>
 </template>
 
@@ -94,6 +108,7 @@ import { ref, watch, onMounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import request from '@/utils/request'
 import { formatImageUrl } from '@/utils/image'
+import { useUserStore } from '@/store/user'
 
 const tabs = [
   { name: 'reply', title: '回复我的', icon: 'comment-o', bgColor: '#1890ff' },
@@ -114,6 +129,26 @@ const actionActions = [
 ]
 
 const theme = ref(uni.getStorageSync('theme') || 'light')
+const userStore = useUserStore()
+
+const showLoginPopup = ref(false)
+
+const ensureLoginWithChoice = () => {
+  if (userStore.isLoggedIn) return true
+
+  showLoginPopup.value = true
+  return false
+}
+
+const onLoginPopupCancel = () => {
+  showLoginPopup.value = false
+  uni.switchTab({ url: '/pages/index/index' })
+}
+
+const onLoginPopupConfirm = () => {
+  showLoginPopup.value = false
+  uni.navigateTo({ url: '/pages/auth/login' })
+}
 
 const onThemeChange = (t: string) => {
   theme.value = t
@@ -121,14 +156,16 @@ const onThemeChange = (t: string) => {
 
 onMounted(() => {
   uni.$on('menu:theme-change', onThemeChange)
-  fetchNotifications(true)
+  // 首次进入交给 onShow 统一处理（避免未登录时 onMounted/onShow 触发两次弹窗）
 })
 
 watch(activeTab, () => {
+  if (!userStore.isLoggedIn) return
   fetchNotifications(true)
 })
 
 const fetchNotifications = async (refresh = false) => {
+  if (!ensureLoginWithChoice()) return
   if (loading.value || (finished.value && !refresh)) return
   if (refresh) {
     page.value = 1
@@ -324,11 +361,65 @@ const formatDate = (dateStr: string) => {
 }
 
 onShow(() => {
+  if (!ensureLoginWithChoice()) return
   fetchNotifications(true)
 })
 </script>
 
 <style scoped>
+.login-popup {
+  width: 620rpx;
+  padding: 40rpx 36rpx 32rpx;
+  box-sizing: border-box;
+  background-color: var(--card-bg);
+}
+
+.login-popup__icon {
+  width: 88rpx;
+  height: 88rpx;
+  border-radius: 44rpx;
+  background: linear-gradient(135deg, #1989fa, #4facfe);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 6rpx auto 22rpx;
+}
+
+.login-popup__title {
+  display: block;
+  text-align: center;
+  font-size: 34rpx;
+  font-weight: 700;
+  color: var(--text-color);
+  margin-bottom: 14rpx;
+}
+
+.login-popup__desc {
+  display: block;
+  text-align: center;
+  font-size: 26rpx;
+  line-height: 1.6;
+  color: var(--text-muted);
+  margin-bottom: 28rpx;
+}
+
+.login-popup__actions {
+  display: flex;
+  gap: 18rpx;
+}
+
+.login-popup__btn {
+  flex: 1;
+}
+
+:deep(.van-popup) {
+  background: transparent;
+}
+
+:deep(.van-button) {
+  height: 80rpx;
+}
+
 .page {
   min-height: 100vh;
   background-color: var(--bg-color);

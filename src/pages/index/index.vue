@@ -3,7 +3,8 @@
     <view class="top-bar">
       <view class="search-wrap">
         <van-search
-          v-model="searchKeyword"
+          :model-value="searchKeyword"
+          @update:model-value="onSearchKeywordChange"
           placeholder="搜索视频、UP主"
           shape="round"
           background="transparent"
@@ -125,6 +126,20 @@
         <text v-else-if="finished" class="no-more">没有更多了</text>
       </view>
     </scroll-view>
+
+    <van-popup v-model:show="showLoginPopup" round :close-on-click-overlay="true">
+      <view class="login-popup">
+        <view class="login-popup__icon">
+          <van-icon name="lock" size="22px" color="#ffffff" />
+        </view>
+        <text class="login-popup__title">需要登录</text>
+        <text class="login-popup__desc">登录后才能查看{{ loginPopupTabLabel }}内容</text>
+        <view class="login-popup__actions">
+          <van-button block plain round type="default" class="login-popup__btn" @click="onLoginPopupCancel">先看看</van-button>
+          <van-button block round type="primary" class="login-popup__btn" @click="onLoginPopupConfirm">去登录</van-button>
+        </view>
+      </view>
+    </van-popup>
   </view>
 </template>
 
@@ -180,6 +195,16 @@ const searchOrder = ref('')
 
 const userStore = useUserStore()
 const feedTab = ref<'recommend' | 'following' | 'featured'>('recommend')
+
+const showLoginPopup = ref(false)
+const loginPopupTabLabel = ref('')
+const loginPopupTargetTab = ref<'recommend' | 'following' | 'featured'>('recommend')
+
+const onSearchKeywordChange = (v: any) => {
+  const next = v === undefined || v === null ? '' : String(v)
+  searchKeyword.value = next
+  onInput(next)
+}
 
 const fetchVideos = async (refresh = false) => {
   if (loading.value) return
@@ -241,11 +266,27 @@ const fetchVideos = async (refresh = false) => {
   }
 }
 
+const promptLoginForFeed = (tab: 'following' | 'featured') => {
+  loginPopupTargetTab.value = tab
+  loginPopupTabLabel.value = tab === 'following' ? '关注' : '精选'
+  showLoginPopup.value = true
+}
+
+const onLoginPopupCancel = () => {
+  showLoginPopup.value = false
+  feedTab.value = 'recommend'
+}
+
+const onLoginPopupConfirm = () => {
+  showLoginPopup.value = false
+  uni.navigateTo({ url: '/pages/auth/login' })
+}
+
 const switchFeed = (tab: 'recommend' | 'following' | 'featured') => {
   if (feedTab.value === tab) return
   
-  if (tab === 'following' && !userStore.isLoggedIn) {
-    uni.navigateTo({ url: '/pages/auth/login' })
+  if (!userStore.isLoggedIn && (tab === 'following' || tab === 'featured')) {
+    promptLoginForFeed(tab)
     return
   }
   
@@ -425,8 +466,60 @@ const onRefresh = () => {
   })
 }
 </script>
-
 <style scoped>
+.login-popup {
+  width: 620rpx;
+  padding: 40rpx 36rpx 32rpx;
+  box-sizing: border-box;
+  background-color: var(--card-bg);
+}
+
+.login-popup__icon {
+  width: 88rpx;
+  height: 88rpx;
+  border-radius: 44rpx;
+  background: linear-gradient(135deg, #1989fa, #4facfe);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 6rpx auto 22rpx;
+}
+
+.login-popup__title {
+  display: block;
+  text-align: center;
+  font-size: 34rpx;
+  font-weight: 700;
+  color: var(--text-color);
+  margin-bottom: 14rpx;
+}
+
+.login-popup__desc {
+  display: block;
+  text-align: center;
+  font-size: 26rpx;
+  line-height: 1.6;
+  color: var(--text-muted);
+  margin-bottom: 28rpx;
+}
+
+.login-popup__actions {
+  display: flex;
+  gap: 18rpx;
+}
+
+.login-popup__btn {
+  flex: 1;
+}
+
+:deep(.van-popup) {
+  background: transparent;
+}
+
+:deep(.van-button) {
+  height: 80rpx;
+}
+
 .index-container {
   height: 100vh;
   background-color: var(--bg-color);

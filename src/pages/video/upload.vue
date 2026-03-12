@@ -21,7 +21,8 @@
       <view class="form-section">
         <van-cell-group inset :border="false" class="custom-group">
           <van-field
-            v-model="title"
+            :model-value="title"
+            @update:model-value="onTitleChange"
             label="标题"
             placeholder="填写视频标题"
             input-align="right"
@@ -29,7 +30,8 @@
             show-word-limit
           />
           <van-field
-            v-model="description"
+            :model-value="description"
+            @update:model-value="onDescriptionChange"
             label="简介"
             type="textarea"
             placeholder="填写视频简介"
@@ -39,7 +41,7 @@
             maxlength="200"
             show-word-limit
           />
-          <van-cell title="分类" is-link :value="categoryName" @click="showCategoryPicker = true" />
+          <van-cell title="分类" is-link :value="categoryName" @click="openCategorySelector" />
           
           <view class="tag-cell">
             <view class="tag-header">
@@ -91,21 +93,35 @@
       <view class="safe-bottom"></view>
     </scroll-view>
 
-    <!-- 分类选择器 -->
-    <van-popup v-model:show="showCategoryPicker" position="bottom" round>
-      <van-picker
-        :columns="categoryColumns"
-        @confirm="onCategoryConfirm"
-        @cancel="showCategoryPicker = false"
-        show-toolbar
-      />
+    <van-action-sheet
+      v-model:show="showCategorySheet"
+      title="选择分类"
+      :actions="categoryActions"
+      cancel-text="取消"
+      close-on-click-action
+      @select="onCategorySelect"
+    />
+
+    <van-popup v-model:show="showLoginPopup" round :close-on-click-overlay="true">
+      <view class="login-popup">
+        <view class="login-popup__icon">
+          <van-icon name="lock" size="22px" color="#ffffff" />
+        </view>
+        <text class="login-popup__title">需要登录</text>
+        <text class="login-popup__desc">登录后才能发布视频</text>
+        <view class="login-popup__actions">
+          <van-button block plain round type="default" class="login-popup__btn" @click="onLoginPopupCancel">先看看</van-button>
+          <van-button block round type="primary" class="login-popup__btn" @click="onLoginPopupConfirm">去登录</van-button>
+        </view>
+      </view>
     </van-popup>
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
-import request, { BASE_URL } from '@/utils/request'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
+import request, { getBaseUrl } from '@/utils/request'
 import { useUserStore } from '@/store/user'
 
 const userStore = useUserStore()
@@ -125,9 +141,38 @@ const selectedCategory = ref<any>(null)
 const selectedTags = ref<any[]>([])
 const tagInput = ref('')
 const tagSuggestions = ref<any[]>([])
-const showCategoryPicker = ref(false)
+
+const showCategorySheet = ref(false)
+
+const showLoginPopup = ref(false)
+
+const onTitleChange = (v: any) => {
+  title.value = v === undefined || v === null ? '' : String(v)
+}
+
+const onDescriptionChange = (v: any) => {
+  description.value = v === undefined || v === null ? '' : String(v)
+}
+
+const ensureLoginWithChoice = () => {
+  if (userStore.isLoggedIn) return true
+
+  showLoginPopup.value = true
+  return false
+}
+
+const onLoginPopupCancel = () => {
+  showLoginPopup.value = false
+  uni.switchTab({ url: '/pages/index/index' })
+}
+
+const onLoginPopupConfirm = () => {
+  showLoginPopup.value = false
+  uni.navigateTo({ url: '/pages/auth/login' })
+}
 
 const pickVideo = () => {
+  if (!ensureLoginWithChoice()) return
   uni.chooseVideo({
     sourceType: ['album', 'camera'],
     success: (res) => {
@@ -146,8 +191,14 @@ const fetchCategories = async () => {
       url: '/api/content/categories/',
       noAuth: true
     })
-    categories.value = res.results || []
-  } catch (err) {}
+    const list = Array.isArray(res)
+      ? res
+      : (res as any)?.results || (res as any)?.data?.results || (res as any)?.data || []
+    categories.value = Array.isArray(list) ? list : []
+  } catch (err) {
+    categories.value = []
+    uni.showToast({ title: '分类加载失败', icon: 'none' })
+  }
 }
 
 const categoryName = computed(() => {
@@ -155,18 +206,63 @@ const categoryName = computed(() => {
 })
 
 const canPublish = computed(() => {
-  return title.value.trim() && selectedCategory.value && videoPath.value && !uploading.value
+  return title.value.trim() && videoPath.value && !uploading.value
 })
 
-const categoryColumns = computed(() => {
-  return categories.value.map(c => c.name)
+const categoryActions = computed(() => {
+  return categories.value.map((c: any) => ({
+    name: String(c?.name ?? ''),
+    value: c
+  }))
 })
 
-const onCategoryConfirm = (e: any) => {
-  const { index } = e
-  selectedCategory.value = categories.value[index]
-  showCategoryPicker.value = false
+const openCategorySelector = async () => {
+  if (!categories.value.length) {
+    await fetchCategories()
+  }
+  if (!categories.value.length) {
+    uni.showToast({ title: '暂无分类数据', icon: 'none' })
+    return
+  }
+
+  showCategorySheet.value = true
 }
+
+const onCategorySelect = (action: any) => {
+  selectedCategory.value = action?.value || null
+}
+
+let tagTimer: any = null
+
+const fetchTagSuggestions = async () => {
+  if (tagTimer) clearTimeout(tagTimer)
+  tagTimer = setTimeout(async () => {
+    const q = tagInput.value.trim()
+    if (!q) {
+      tagSuggestions.value = []
+      return
+    }
+    try {
+      const res = await request({
+        url: '/api/content/tags/',
+        data: { q, page_size: 10 },
+        noAuth: true,
+        silent: true,
+      })
+      const opts = Array.isArray(res)
+        ? res
+        : (res as any)?.results || (res as any)?.data?.results || (res as any)?.data || []
+      const chosenIds = selectedTags.value.map(t => t.id)
+      tagSuggestions.value = (Array.isArray(opts) ? opts : []).filter((o: any) => !chosenIds.includes(o.id))
+    } catch {
+      tagSuggestions.value = []
+    }
+  }, 300)
+}
+
+watch(tagInput, () => {
+  fetchTagSuggestions()
+})
 
 const handleTagConfirm = async () => {
   const name = tagInput.value.trim()
@@ -203,16 +299,15 @@ const removeTag = (tag: any) => {
 
 const handlePublish = async () => {
   if (!videoPath.value) return
-  if (!userStore.isLoggedIn) {
-    return uni.navigateTo({ url: '/pages/auth/login' })
-  }
+  if (!ensureLoginWithChoice()) return
 
   uploading.value = true
   percent.value = 0
   
   const token = uni.getStorageSync('token')
+  const baseUrl = getBaseUrl().replace(/\/$/, '')
   const uploadTask = uni.uploadFile({
-    url: `${BASE_URL}/api/videos/upload/`,
+    url: `${baseUrl}/api/videos/upload/`,
     filePath: videoPath.value,
     name: 'file',
     header: {
@@ -235,18 +330,14 @@ const handlePublish = async () => {
 
       if (res.statusCode >= 200 && res.statusCode < 300) {
         uni.showToast({ title: '发布成功', icon: 'success' })
-        const vid = String(payload?.id || payload?.video_id || '')
         setTimeout(() => {
-          if (vid) {
-            uni.redirectTo({ url: `/pages/video/detail?id=${encodeURIComponent(vid)}` })
-          } else {
-            uni.redirectTo({ url: '/pages/me/works' })
-          }
+          try { uni.setStorageSync('works_refresh', '1') } catch { }
+          uni.redirectTo({ url: '/pages/me/works' })
         }, 800)
-      } else {
-        const msg = String(payload?.detail || payload?.message || '发布失败')
-        uni.showToast({ title: msg, icon: 'none' })
+        return
       }
+      const msg = String(payload?.detail || payload?.message || '发布失败')
+      uni.showToast({ title: msg, icon: 'none' })
     },
     fail: () => {
       uni.showToast({ title: '网络连接失败', icon: 'none' })
@@ -266,12 +357,70 @@ onMounted(() => {
   fetchCategories()
 })
 
+onShow(() => {
+  ensureLoginWithChoice()
+})
+
 onUnmounted(() => {
+  if (tagTimer) clearTimeout(tagTimer)
   uni.$off('menu:theme-change', onThemeChange)
 })
 </script>
 
 <style scoped>
+.login-popup {
+  width: 620rpx;
+  padding: 40rpx 36rpx 32rpx;
+  box-sizing: border-box;
+  background-color: var(--card-bg);
+}
+
+.login-popup__icon {
+  width: 88rpx;
+  height: 88rpx;
+  border-radius: 44rpx;
+  background: linear-gradient(135deg, #1989fa, #4facfe);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 6rpx auto 22rpx;
+}
+
+.login-popup__title {
+  display: block;
+  text-align: center;
+  font-size: 34rpx;
+  font-weight: 700;
+  color: var(--text-color);
+  margin-bottom: 14rpx;
+}
+
+.login-popup__desc {
+  display: block;
+  text-align: center;
+  font-size: 26rpx;
+  line-height: 1.6;
+  color: var(--text-muted);
+  margin-bottom: 28rpx;
+}
+
+.login-popup__actions {
+  display: flex;
+  gap: 18rpx;
+}
+
+.login-popup__btn {
+  flex: 1;
+}
+
+:deep(.van-popup) {
+  background: transparent;
+}
+
+:deep(.van-button) {
+  height: 80rpx;
+}
+
 .page {
   min-height: 100vh;
   background-color: var(--bg-color);
@@ -296,14 +445,14 @@ onUnmounted(() => {
 }
 
 .upload-section {
-  padding: 40rpx 24rpx;
+  padding: 60rpx 24rpx 20rpx;
   display: flex;
   justify-content: center;
 }
 
 .video-picker {
   width: 100%;
-  height: 400rpx;
+  height: 360rpx;
   background-color: var(--bg-color);
   border-radius: 16rpx;
   display: flex;

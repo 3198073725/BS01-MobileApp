@@ -1,6 +1,12 @@
 <template>
   <view :class="['page', theme]">
-    <van-nav-bar title="关于 VidSprout" left-arrow @click-left="goBack" fixed placeholder :border="theme !== 'dark'" />
+    <view class="nav-bar">
+      <view class="back-btn" @click="goBack">
+        <van-icon name="arrow-left" size="20px" :color="theme === 'dark' ? '#e3e5e7' : '#18191c'" />
+      </view>
+      <text class="nav-title">关于 VidSprout</text>
+      <view class="placeholder"></view>
+    </view>
 
     <scroll-view scroll-y class="content">
       <view class="hero">
@@ -134,6 +140,30 @@ const goLicense = () => {
   flex-direction: column;
 }
 
+.nav-bar {
+  height: 88rpx;
+  background-color: var(--card-bg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24rpx;
+  border-bottom: 1rpx solid var(--border-color);
+  /* #ifdef APP-PLUS */
+  padding-top: var(--status-bar-height);
+  height: calc(88rpx + var(--status-bar-height));
+  /* #endif */
+}
+
+.nav-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: var(--text-color);
+}
+
+.back-btn, .placeholder {
+  width: 80rpx;
+}
+
 .content {
   flex: 1;
   overflow: hidden;
@@ -192,16 +222,6 @@ const goLicense = () => {
 
 .safe-bottom {
   height: env(safe-area-inset-bottom);
-}
-
-:deep(.van-nav-bar) {
-  background-color: var(--card-bg) !important;
-}
-:deep(.van-nav-bar__title) {
-  color: var(--text-color) !important;
-}
-:deep(.van-nav-bar .van-icon) {
-  color: var(--text-color) !important;
 }
 
 :deep(.van-cell) {

@@ -3,27 +3,31 @@
     <van-cell-group inset class="form-group" :border="theme !== 'dark'">
       <van-cell title="头像" center>
         <template #value>
-          <van-image
-            round
-            width="80rpx"
-            height="80rpx"
-            :src="formatImageUrl(userInfo)"
-            @click="handleUploadAvatar"
-          />
+          <van-image round width="80rpx" height="80rpx" :key="avatarSrc" :src="avatarSrc" @click="handleUploadAvatar" />
         </template>
       </van-cell>
-      <van-field
-        v-model="userInfo.nickname"
-        label="昵称"
-        placeholder="请输入昵称"
-        input-align="right"
-      />
-      <van-field
-        v-model="userInfo.email"
-        label="邮箱"
-        readonly
-        input-align="right"
-      />
+      <van-cell title="昵称" center>
+        <template #value>
+          <van-field :model-value="userInfo.nickname" @update:model-value="onNicknameChange" placeholder="请输入昵称"
+            input-align="right" :border="false" />
+        </template>
+      </van-cell>
+      <van-cell title="邮箱" :value="userInfo.email" />
+      <van-cell title="邮箱验证" center>
+        <template #value>
+          <view class="verify-row">
+            <text class="verify-status" :class="{ ok: userInfo.is_verified }">{{ userInfo.is_verified ? '已验证' : '未验证'
+              }}</text>
+            <van-button v-if="!userInfo.is_verified" size="small" type="primary" plain :loading="verifying"
+              @click="handleSendVerifyEmail">
+              发送验证邮件
+            </van-button>
+            <van-button v-else size="small" type="primary" plain :loading="refreshing" @click="fetchMe">
+              刷新状态
+            </van-button>
+          </view>
+        </template>
+      </van-cell>
     </van-cell-group>
 
     <view class="actions">
@@ -33,10 +37,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import { useUserStore } from '@/store/user'
 import { formatImageUrl } from '@/utils/image'
-import request, { BASE_URL } from '@/utils/request'
+import request, { getBaseUrl } from '@/utils/request'
 
 const userStore = useUserStore()
 const theme = ref(uni.getStorageSync('theme') || 'light')
@@ -44,9 +49,22 @@ const userInfo = ref({
   nickname: '',
   email: '',
   avatar_url: '',
-  profile_picture: ''
+  profile_picture: '',
+  is_verified: false,
 })
 const loading = ref(false)
+const onNicknameChange = (v: any) => {
+  userInfo.value.nickname = v === undefined || v === null ? '' : String(v)
+}
+const verifying = ref(false)
+const refreshing = ref(false)
+
+const avatarNonce = ref(Date.now())
+const avatarSrc = computed(() => {
+  const raw = formatImageUrl(userInfo.value)
+  const sep = raw.includes('?') ? '&' : '?'
+  return `${raw}${sep}t=${avatarNonce.value}`
+})
 
 const onThemeChange = (t: string) => {
   theme.value = t
@@ -54,9 +72,74 @@ const onThemeChange = (t: string) => {
 
 onMounted(() => {
   uni.$on('menu:theme-change', onThemeChange)
-  if (userStore.userInfo) {
-    userInfo.value = { ...userStore.userInfo }
+})
+
+watch(
+  () => userStore.userInfo,
+  async (val) => {
+    if (!val) return
+    const u: any = val
+    userInfo.value = {
+      ...u,
+      nickname: u?.nickname === undefined || u?.nickname === null ? '' : String(u.nickname),
+      email: u?.email === undefined || u?.email === null ? '' : String(u.email),
+      is_verified: !!u?.is_verified,
+    }
+    await nextTick()
+  },
+  { immediate: true }
+)
+
+const fetchMe = async () => {
+  if (!userStore.isLoggedIn) return
+  if (refreshing.value) return
+  refreshing.value = true
+  try {
+    const res = await request({ url: '/api/users/me/', silent: true })
+    if (res) {
+      userStore.setUserInfo(res)
+      const u: any = res
+      userInfo.value = {
+        ...u,
+        nickname: u?.nickname === undefined || u?.nickname === null ? '' : String(u.nickname),
+        email: u?.email === undefined || u?.email === null ? '' : String(u.email),
+        is_verified: !!u?.is_verified,
+      }
+      await nextTick()
+    }
+  } catch { }
+  finally {
+    refreshing.value = false
   }
+}
+
+const handleSendVerifyEmail = async () => {
+  if (verifying.value) return
+  verifying.value = true
+  try {
+    await request({
+      url: '/api/users/verify-email/request/',
+      method: 'POST',
+      data: {},
+    })
+
+    uni.showModal({
+      title: '已发送验证邮件',
+      content: '请前往邮箱打开验证链接完成认证。完成后回到 App 点击“刷新状态”。',
+      confirmText: '刷新状态',
+      cancelText: '知道了',
+      success: (res) => {
+        if (res.confirm) fetchMe()
+      }
+    })
+  } catch {
+  } finally {
+    verifying.value = false
+  }
+}
+
+onShow(() => {
+  fetchMe()
 })
 
 onUnmounted(() => {
@@ -68,19 +151,44 @@ const handleUploadAvatar = () => {
     count: 1,
     success: (res) => {
       const tempFilePath = res.tempFilePaths[0]
+      const baseUrl = getBaseUrl().replace(/\/$/, '')
       uni.uploadFile({
-        url: `${BASE_URL}/api/users/avatar/upload/`,
+        url: `${getBaseUrl()}/api/users/avatar/upload/`,
         filePath: tempFilePath,
         name: 'avatar',
         header: {
           'Authorization': `Bearer ${userStore.token}`
         },
         success: (uploadRes) => {
-          const data = JSON.parse(uploadRes.data)
-          userInfo.value.profile_picture = data.avatar_url || data.profile_picture
-          uni.showToast({ title: '头像上传成功', icon: 'success' })
+          try {
+            if (uploadRes.statusCode < 200 || uploadRes.statusCode >= 300) {
+              let msg = `上传失败：HTTP ${uploadRes.statusCode}`
+              try {
+                const parsed = typeof uploadRes.data === 'string' ? JSON.parse(uploadRes.data) : uploadRes.data
+                msg = String(parsed?.detail || parsed?.file || parsed?.message || msg)
+              } catch { }
+              uni.showToast({ title: msg, icon: 'none' })
+              return
+            }
+            const data = typeof uploadRes.data === 'string' ? JSON.parse(uploadRes.data) : (uploadRes.data as any)
+            const newPic = data?.profile_picture || data?.avatar_url
+            if (newPic) {
+              userInfo.value.profile_picture = newPic
+              try {
+                userStore.setUserInfo({ ...(userStore.userInfo || {}), ...userInfo.value })
+              } catch { }
+            }
+            uni.showToast({ title: '头像上传成功', icon: 'success' })
+          } catch (e) {
+            uni.showToast({ title: '头像上传失败：返回解析错误', icon: 'none' })
+          }
+        },
+        fail: (e) => {
+          const msg = String((e as any)?.errMsg || '').trim()
+          uni.showToast({ title: msg ? `头像上传失败：${msg}` : '头像上传失败', icon: 'none' })
         }
-      })
+      }
+      )
     }
   })
 }
@@ -111,6 +219,10 @@ const handleSave = async () => {
   min-height: 100vh;
   background-color: var(--bg-color);
   padding-top: 30rpx;
+  box-sizing: border-box;
+  /* #ifdef APP-PLUS */
+  padding-top: calc(var(--status-bar-height) + 30rpx);
+  /* #endif */
 }
 
 .form-group {
@@ -134,5 +246,38 @@ const handleSave = async () => {
 
 :deep(.van-cell__title) {
   color: var(--text-color) !important;
+}
+
+.verify-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16rpx;
+}
+
+.verify-status {
+  font-size: 24rpx;
+  color: var(--text-muted);
+}
+
+.verify-status.ok {
+  color: #07c160;
+}
+
+.native-field {
+  flex: 1;
+  min-width: 200rpx;
+  background-color: var(--bg-color);
+  border-radius: 14rpx;
+  padding: 16rpx 20rpx;
+}
+
+.native-input {
+  width: 100%;
+  text-align: right;
+  font-size: 28rpx;
+  color: var(--text-color, #18191c);
+  -webkit-text-fill-color: var(--text-color, #18191c);
+  background-color: transparent;
 }
 </style>
