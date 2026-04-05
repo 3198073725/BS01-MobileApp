@@ -70,7 +70,7 @@
               </picker>
             </template>
           </van-cell>
-          <van-cell title="API 地址" icon="link-o" is-link @click="goApiSettings" />
+          <van-cell v-if="showApiBase" title="API 地址" icon="link-o" is-link @click="goApiSettings" />
         </van-cell-group>
       </view>
 
@@ -90,9 +90,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useUserStore } from '@/store/user'
+import { useConfigStore } from '@/store/config'
 import request from '@/utils/request'
 
 const userStore = useUserStore()
+const configStore = useConfigStore()
+
+const showApiBase = computed(() => configStore.get('show_api_base', true))
 const theme = ref(uni.getStorageSync('theme') || 'light')
 
 const onThemeChange = (t: string) => {

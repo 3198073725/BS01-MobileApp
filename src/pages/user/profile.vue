@@ -12,9 +12,10 @@
           <image
             v-if="userStore.userInfo"
             class="avatar"
-            :src="formatImageUrl(userStore.userInfo)"
+            :src="avatarSrc"
             mode="aspectFill"
             @error="handleAvatarError"
+            @longpress="handleAvatarLongPress"
             @click="handleAvatarClick"
           />
           <image v-else class="avatar" src="/static/logo.png" mode="aspectFill" @click="goToLogin" />
@@ -58,7 +59,7 @@
 
         <van-cell-group :border="false" class="custom-group">
           <van-cell title="设置" icon="setting-o" is-link @click="goToSettings" />
-          <van-cell title="API 地址" icon="link-o" is-link @click="goToApiSettings" />
+          <van-cell v-if="showApiBase" title="API 地址" icon="link-o" is-link @click="goToApiSettings" />
           <van-cell title="关于 VidSprout" icon="info-o" is-link @click="goToAbout" />
         </van-cell-group>
       </view>
@@ -88,14 +89,33 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useUserStore } from '@/store/user'
+import { useConfigStore } from '@/store/config'
 import { formatImageUrl } from '@/utils/image'
 import request from '@/utils/request'
 
 const userStore = useUserStore()
+const configStore = useConfigStore()
+
+const showApiBase = computed(() => configStore.get('show_api_base', true))
 const theme = ref(uni.getStorageSync('theme') || 'light')
+const avatarNonce = ref(Date.now())
+const avatarSrc = computed(() => {
+  const raw = formatImageUrl(userStore.userInfo)
+  const sep = raw.includes('?') ? '&' : '?' 
+  return `${raw}${sep}t=${avatarNonce.value}`
+})
+
+watch(
+  () => {
+    const u: any = userStore.userInfo as any
+    return `${u?.profile_picture || ''}|${u?.avatar_url || ''}`
+  },
+  () => { avatarNonce.value = Date.now() },
+  { immediate: true }
+)
 const profileStats = ref({
   liked_count: 0,
   following_count: 0,
@@ -136,8 +156,18 @@ const fetchProfileStats = async () => {
   }
 }
 
+const fetchMe = async () => {
+  if (!userStore.isLoggedIn) return
+  try {
+    const res = await request({ url: '/api/users/me/', silent: true })
+    if (res) userStore.setUserInfo(res)
+  } catch { }
+}
+
 onShow(() => {
+  fetchMe()
   fetchProfileStats()
+  avatarNonce.value = Date.now()
 })
 
 const handleScan = () => {
@@ -190,6 +220,30 @@ const handleScan = () => {
 const handleAvatarClick = () => {
   if (!ensureLogin()) return
   uni.navigateTo({ url: '/pages/user/edit' })
+}
+
+const handleAvatarLongPress = () => {
+  try {
+    const url = String(avatarSrc.value || '')
+    if (!url) return
+    uni.setClipboardData({
+      data: url,
+      success: () => {
+        uni.showModal({
+          title: '头像地址已复制',
+          content: url,
+          showCancel: false,
+        })
+      },
+      fail: () => {
+        uni.showModal({
+          title: '头像地址',
+          content: url,
+          showCancel: false,
+        })
+      }
+    })
+  } catch { }
 }
 
 const goToLogin = () => {
@@ -261,9 +315,7 @@ const goToFollowers = () => {
 }
 
 const handleAvatarError = () => {
-  if (userStore.userInfo) {
-    userStore.userInfo.profile_picture = '/static/logo.png'
-  }
+  // 不在这里覆盖 userInfo 字段，避免把真实头像路径抹掉（影响刷新与排查）
 }
 
 const handleLogout = () => {

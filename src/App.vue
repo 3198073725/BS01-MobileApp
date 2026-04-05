@@ -3,6 +3,7 @@ import { ref } from "vue";
 import { onLaunch, onShow, onHide } from "@dcloudio/uni-app";
 import request from "@/utils/request";
 import { useUserStore } from "@/store/user";
+import { useConfigStore } from "@/store/config";
 
 const theme = ref(uni.getStorageSync('theme') || 'light');
 
@@ -101,6 +102,14 @@ const initAuthState = async () => {
 
 onLaunch(() => {
   console.log("App Launch");
+  
+  // 初始化全局配置并开启定时轮询
+  const configStore = useConfigStore();
+  configStore.fetchConfigs().then(() => {
+    // 每 30 秒检查一次配置版本，实现全端同步强制刷新
+    setInterval(() => configStore.fetchConfigs(), 30000);
+  });
+
   handleH5ResetPasswordDeepLink();
   initAuthState();
   try {

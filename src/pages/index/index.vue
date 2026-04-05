@@ -377,16 +377,9 @@ const fetchCategories = async () => {
 }
 
 const onCategoryChange = (id: string) => {
-  if (id === '') {
-    if (currentCategoryId.value === '') return
-    currentCategoryId.value = ''
-    fetchVideos(true)
-  } else {
-    const cat = categories.value.find(c => c.id === id)
-    uni.navigateTo({
-      url: `/pages/video/category?id=${id}&name=${encodeURIComponent(cat?.name || '分类')}`
-    })
-  }
+  if (currentCategoryId.value === id) return
+  currentCategoryId.value = id
+  fetchVideos(true)
 }
 
 const goToDetail = (id: string) => {

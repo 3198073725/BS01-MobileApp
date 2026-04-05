@@ -86,11 +86,11 @@
       </view>
 
       <!-- 评论区 -->
-      <view class="comment-section">
+      <view class="comment-section" v-if="commentsAllowed">
         <view class="comment-header">
           <view class="comment-title-row">
             <text class="comment-title">评论 {{ formatCount(videoDetail.comment_count || 0) }}</text>
-            <view class="sort-tabs">
+            <view class="sort-tabs" v-if="commentsAllowed">
               <text :class="{ active: commentSort === 'hot' }" @click="handleSortComments('hot')">按热度</text>
               <text class="sort-divider">|</text>
               <text :class="{ active: commentSort === 'new' }" @click="handleSortComments('new')">按时间</text>
@@ -99,7 +99,7 @@
         </view>
 
         <!-- 发表评论 -->
-        <view class="comment-input-area" v-if="userStore.isLoggedIn">
+        <view class="comment-input-area" v-if="userStore.isLoggedIn && commentsAllowed">
           <image 
             class="user-avatar" 
             :src="formatImageUrl(userStore.userInfo)" 
@@ -272,8 +272,9 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onHide } from '@dcloudio/uni-app'
 import { useUserStore } from '@/store/user'
+import { useConfigStore } from '@/store/config'
 import { formatImageUrl } from '@/utils/image'
 import request, { getBaseUrl } from '@/utils/request'
 
@@ -283,10 +284,20 @@ const onThemeChange = (t: string) => {
 }
 
 onUnmounted(() => {
+  isPageActive.value = false
+  clearProcessingTimer()
   uni.$off('menu:theme-change', onThemeChange)
 })
 
+onHide(() => {
+  isPageActive.value = false
+  clearProcessingTimer()
+})
+
 const userStore = useUserStore()
+const configStore = useConfigStore()
+
+const commentsAllowed = computed(() => configStore.get('allow_comments', true))
 const videoId = ref('')
 const videoDetail = ref<any>(null)
 const loading = ref(true)
@@ -312,6 +323,17 @@ const commentContent = ref('')
 const submitting = ref(false)
 const replyTarget = ref<any>(null)
 const replyRoot = ref<any>(null)
+
+const isPageActive = ref(true)
+let processingTimer: any = null
+const processingToastShown = ref(false)
+
+const clearProcessingTimer = () => {
+  if (processingTimer) {
+    clearTimeout(processingTimer)
+    processingTimer = null
+  }
+}
 
 const onCommentContentChange = (v: any) => {
   commentContent.value = v === undefined || v === null ? '' : String(v)
@@ -419,10 +441,23 @@ const rateIndex = ref(2) // 默认 1.0
 const qualityOptions = ref<any[]>([])
 const qualityIndex = ref(0)
 const currentSrc = ref('')
+const currentQualityLabel = computed(() => qualityOptions.value[qualityIndex.value]?.label || '自动')
 
-const currentQualityLabel = computed(() => {
-  return qualityOptions.value[qualityIndex.value]?.label || '清晰度'
-})
+// HLS error fallback tracking
+const hlsFailed = ref(false)
+const originalHlsUrl = ref('')
+
+// URL normalization helper (shared between fetchVideoDetail and onVideoError)
+const normalizeMediaUrl = (url?: string): string => {
+  if (!url) return ''
+  const u = String(url)
+  if (/^https?:\/\//i.test(u)) return u
+  if (/^blob:/i.test(u)) return u
+
+  const base = getBaseUrl().replace(/\/$/, '')
+  if (u.startsWith('/')) return `${base}${u}`
+  return `${base}/${u}`
+}
 
 const togglePlay = () => {
   videoContext.value = uni.createVideoContext('myVideo')
@@ -503,20 +538,13 @@ const fetchVideoDetail = async () => {
     videoDetail.value = res
     
     const options: any[] = []
-    const normalizeMediaUrl = (url?: string): string => {
-      if (!url) return ''
-      const u = String(url)
-      if (/^https?:\/\//i.test(u)) return u
-      if (/^blob:/i.test(u)) return u
-
-      const base = getBaseUrl().replace(/\/$/, '')
-      if (u.startsWith('/')) return `${base}${u}`
-      return `${base}/${u}`
-    }
 
     const hls = normalizeMediaUrl((res as any)?.hls_master_url)
     const low = normalizeMediaUrl((res as any)?.low_mp4_url)
     const raw = normalizeMediaUrl((res as any)?.video_url)
+
+    // Store original HLS for potential fallback
+    originalHlsUrl.value = hls
 
     const supportsHls = (() => {
       try {
@@ -531,15 +559,42 @@ const fetchVideoDetail = async () => {
     })()
 
     // H5 下大多数浏览器/Android WebView 不能直接播放 m3u8；优先 mp4
-    const canUseHls = supportsHls
+    // If HLS previously failed, don't try it again
+    const canUseHls = supportsHls && !hlsFailed.value && hls
 
     if (hls && canUseHls) options.push({ label: '自动', url: hls })
     if (low) options.push({ label: '流畅', url: low })
     if (raw) options.push({ label: '原始', url: raw })
 
     qualityOptions.value = options
+    // Prefer HLS if available, otherwise fallback to low or raw
+    // If HLS failed before, skip it entirely
     currentSrc.value = (hls && canUseHls) ? hls : (low || raw || '')
 
+    // 仅当视频状态为 processing 且确实没有可播放源时，才提示“处理中”并轮询
+    const status = String((res as any)?.status || '')
+    const isProcessing = status && ['processing', 'pending', 'transcoding', 'queued'].includes(status)
+    const hasPlayableSrc = Boolean(currentSrc.value)
+    if (isProcessing && !hasPlayableSrc) {
+      if (!processingToastShown.value && isPageActive.value) {
+        processingToastShown.value = true
+        uni.showToast({ title: '视频处理中，稍后可播放', icon: 'none' })
+      }
+      clearProcessingTimer()
+      if (isPageActive.value) {
+        processingTimer = setTimeout(() => {
+          if (isPageActive.value) fetchVideoDetail()
+        }, 2500)
+      }
+    } else {
+      processingToastShown.value = false
+      clearProcessingTimer()
+    }
+
+    if (!currentSrc.value) {
+      uni.showToast({ title: '视频地址无效，暂无法播放', icon: 'none' })
+    }
+    
     try {
       console.info('[video] sources resolved', {
         hls,
@@ -898,6 +953,19 @@ const onVideoError = (e: any) => {
       error: mediaErr ? { code: mediaErr.code, message: mediaErr.message } : null,
       event: e,
     })
+
+    // HLS fallback: if HLS is playing and fails, try raw MP4 instead
+    const isHlsPlaying = currentSrc.value.includes('.m3u8') || currentSrc.value.includes('/hls/')
+    if (isHlsPlaying && !hlsFailed.value) {
+      hlsFailed.value = true
+      const raw = normalizeMediaUrl((videoDetail.value as any)?.video_url)
+      if (raw && raw !== currentSrc.value) {
+        console.info('[video] HLS failed, falling back to raw MP4:', raw)
+        currentSrc.value = raw
+        uni.showToast({ title: '切换至兼容模式播放', icon: 'none', duration: 2000 })
+        return // Don't show error toast, we're retrying
+      }
+    }
   } catch {
     console.error('Video error:', e)
   }

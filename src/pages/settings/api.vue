@@ -37,7 +37,7 @@
         <view class="group-title">操作</view>
         <van-cell-group :border="false" class="cell-group">
           <van-cell title="保存" icon="success" is-link @click="save" />
-          <van-cell title="清除自定义（恢复默认）" icon="delete-o" is-link @click="clear" />
+          <van-cell title="清除自定义" icon="delete-o" is-link @click="clear" />
           <van-cell title="测试连通性（/api/health/）" icon="link-o" is-link @click="testHealth" :value="testStatus" />
         </van-cell-group>
       </view>
@@ -51,6 +51,7 @@
 import { computed, ref, onMounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { getBaseUrl } from '@/utils/request'
+import request from '@/utils/request'
 
 const theme = ref(uni.getStorageSync('theme') || 'light')
 const apiBaseRaw = ref('')
@@ -134,7 +135,7 @@ const save = () => {
 const clear = () => {
   try {
     uni.removeStorageSync('api_base')
-    apiBaseRaw.value = ''
+    apiBaseRaw.value = 'http://api.bs01.local:8000'
     lastTestOk.value = null
     refreshEffectiveBase()
     uni.showToast({ title: '已清除', icon: 'none' })
@@ -144,42 +145,26 @@ const clear = () => {
 }
 
 const testHealth = async () => {
-  const base = normalize(apiBaseRaw.value)
-  const url = base ? `${base}/api/health/` : ''
-
-  if (!url) {
-    uni.showToast({ title: '请先填写并保存 API 地址', icon: 'none' })
-    return
-  }
-  if (!/^https?:\/\//i.test(base)) {
-    uni.showToast({ title: '必须以 http:// 或 https:// 开头', icon: 'none' })
-    return
-  }
-
   testing.value = true
   lastTestOk.value = null
   try {
-    const res = await new Promise<UniApp.RequestSuccessCallbackResult>((resolve, reject) => {
-      uni.request({
-        url,
-        method: 'GET',
-        timeout: 4000,
-        success: (r) => resolve(r),
-        fail: (e) => reject(e),
-      })
+    // 使用统一的 request 封装，确保与业务请求行为一致，包括鉴权、代理、超时等
+    const res = await request({
+      url: '/api/health/',
+      method: 'GET',
+      timeout: 5000,
+      noAuth: true,
+      silent: true,
     })
 
-    if (res.statusCode >= 200 && res.statusCode < 300) {
-      lastTestOk.value = true
-      uni.showToast({ title: '连接成功', icon: 'none' })
-    } else {
-      lastTestOk.value = false
-      uni.showToast({ title: `失败：HTTP ${res.statusCode}`, icon: 'none' })
-    }
+    // request 封装内部已处理 2xx 成功，直接走这里就是成功
+    lastTestOk.value = true
+    uni.showToast({ title: '连接成功', icon: 'success' })
   } catch (e: any) {
     lastTestOk.value = false
     const msg = String(e?.errMsg || e?.message || '').trim()
-    uni.showToast({ title: msg ? `网络连接失败：${msg}` : '网络连接失败', icon: 'none' })
+    let showMsg = msg ? `连接失败：${msg}` : '网络连接失败'
+    uni.showToast({ title: showMsg, icon: 'none', duration: 3000 })
   } finally {
     testing.value = false
   }

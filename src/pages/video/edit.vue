@@ -8,7 +8,7 @@
       <view class="placeholder"></view>
     </view>
 
-    <scroll-view scroll-y class="content" v-if="!loading && detail">
+    <scroll-view scroll-y class="content-scroll" v-if="!loading && detail">
       <view class="card">
         <video
           v-if="detail.video_url"
@@ -424,16 +424,17 @@ onLoad(async (options: any) => {
 
 <style scoped>
 .page {
-  min-height: 100vh;
+  height: 100vh;
   background-color: var(--bg-color);
   color: var(--text-color);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .nav-bar {
-  position: sticky;
-  top: 0;
+  flex-shrink: 0;
+  position: relative;
   z-index: 100;
   height: 88rpx;
   background-color: var(--card-bg);
@@ -467,7 +468,9 @@ onLoad(async (options: any) => {
 
 .content-scroll {
   flex: 1;
-  overflow: hidden;
+  height: 0;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .card {

@@ -559,11 +559,11 @@ onUnmounted(() => {
 
 .tag-suggestions {
   position: absolute;
-  top: 80rpx;
+  bottom: 80rpx;
   left: 0;
   right: 0;
   background-color: var(--card-bg);
-  box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.1);
+  box-shadow: 0 -4rpx 12rpx rgba(0,0,0,0.1);
   border-radius: 8rpx;
   z-index: 100;
   max-height: 300rpx;

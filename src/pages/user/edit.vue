@@ -8,8 +8,15 @@
       </van-cell>
       <van-cell title="昵称" center>
         <template #value>
-          <van-field :model-value="userInfo.nickname" @update:model-value="onNicknameChange" placeholder="请输入昵称"
-            input-align="right" :border="false" />
+          <view class="nickname-wrap">
+            <van-field
+              v-model="nicknameModel"
+              placeholder="请输入昵称"
+              input-align="right"
+              :border="false"
+              class="nickname-field"
+            />
+          </view>
         </template>
       </van-cell>
       <van-cell title="邮箱" :value="userInfo.email" />
@@ -52,10 +59,23 @@ const userInfo = ref({
   profile_picture: '',
   is_verified: false,
 })
+
+const nicknameModel = computed({
+  get() {
+    const v: any = (userInfo.value as any)?.nickname
+    return v === undefined || v === null ? '' : String(v)
+  },
+  set(val: any) {
+    let v: any = val
+    // App/小程序等环境下，部分组件可能把事件对象作为 v-model 值回传
+    if (v && typeof v === 'object') {
+      v = v?.detail?.value ?? v?.target?.value ?? v?.value
+    }
+    userInfo.value.nickname = v === undefined || v === null ? '' : String(v)
+  }
+})
+
 const loading = ref(false)
-const onNicknameChange = (v: any) => {
-  userInfo.value.nickname = v === undefined || v === null ? '' : String(v)
-}
 const verifying = ref(false)
 const refreshing = ref(false)
 
@@ -204,6 +224,10 @@ const handleSave = async () => {
       }
     })
     userStore.setUserInfo(res)
+    try {
+      const me = await request({ url: '/api/users/me/', silent: true })
+      if (me) userStore.setUserInfo(me)
+    } catch { }
     uni.showToast({ title: '保存成功', icon: 'success' })
     setTimeout(() => uni.navigateBack(), 1500)
   } catch (err) {
@@ -244,6 +268,13 @@ const handleSave = async () => {
   color: var(--text-color) !important;
 }
 
+.nick-input {
+  width: 420rpx;
+  text-align: right;
+  font-size: 28rpx;
+  color: var(--text-color);
+}
+
 :deep(.van-cell__title) {
   color: var(--text-color) !important;
 }
@@ -262,6 +293,33 @@ const handleSave = async () => {
 
 .verify-status.ok {
   color: #07c160;
+}
+
+.nickname-wrap {
+  flex: 1;
+  min-width: 260rpx;
+  display: flex;
+}
+
+:deep(.nickname-field) {
+  width: 100%;
+  display: block;
+}
+
+:deep(.nickname-field .van-field__body) {
+  width: 100%;
+  min-width: 0;
+}
+
+:deep(.nickname-field .van-field__control) {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  text-align: right;
+}
+
+:deep(.nickname-field .van-field__control::placeholder) {
+  text-align: right;
 }
 
 .native-field {
