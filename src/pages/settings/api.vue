@@ -17,7 +17,7 @@
             <input
               class="native-input"
               :value="apiBaseRaw"
-              placeholder="例如：https://117.72.192.70:8000"
+              placeholder="例如：https://api.example.com"
               placeholder-style="color: var(--text-muted);"
               @input="onApiBaseNativeInput"
             />
@@ -135,7 +135,7 @@ const save = () => {
 const clear = () => {
   try {
     uni.removeStorageSync('api_base')
-    apiBaseRaw.value = 'http://api.bs01.local:8000'
+    apiBaseRaw.value = ''
     lastTestOk.value = null
     refreshEffectiveBase()
     uni.showToast({ title: '已清除', icon: 'none' })
