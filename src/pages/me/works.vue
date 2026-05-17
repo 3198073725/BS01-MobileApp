@@ -72,6 +72,7 @@
 import { ref, onMounted, computed, onUnmounted } from 'vue'
 import { onPullDownRefresh, onReachBottom, onShow } from '@dcloudio/uni-app'
 import request from '@/utils/request'
+import { ensureLogin as ensureAuth } from '@/utils/auth'
 import { useUserStore } from '@/store/user'
 import { formatImageUrl } from '@/utils/image'
 
@@ -148,6 +149,15 @@ const onCardClick = (v: any) => {
   }
 }
 
+const removeItemsByIds = (ids: string[]) => {
+  const idSet = new Set(ids.map((id) => String(id)))
+  items.value = items.value.filter((item) => !idSet.has(String(item.id)))
+  selectedIds.value = selectedIds.value.filter((id) => !idSet.has(String(id)))
+  if (!items.value.length) {
+    finished.value = true
+  }
+}
+
 const handleBulkDelete = () => {
   if (selectedIds.value.length === 0) return
   uni.showModal({
@@ -157,27 +167,27 @@ const handleBulkDelete = () => {
     success: async (res) => {
       if (res.confirm) {
         try {
+          const deletedIds = [...selectedIds.value]
           await request({
             url: '/api/videos/bulk-delete/',
             method: 'POST',
-            data: { video_ids: selectedIds.value }
+            data: { video_ids: deletedIds }
           })
           uni.showToast({ title: '已删除', icon: 'success' })
+          removeItemsByIds(deletedIds)
+          try { uni.setStorageSync('works_refresh', '1') } catch {}
           isManageMode.value = false
           selectedIds.value = []
-          fetchList(true)
-        } catch (err) {}
+        } catch (err) {
+          uni.showToast({ title: '批量删除失败', icon: 'none' })
+        }
       }
     }
   })
 }
 
 const ensureLogin = () => {
-  if (!userStore.isLoggedIn) {
-    uni.navigateTo({ url: '/pages/auth/login' })
-    return false
-  }
-  return true
+  return ensureAuth(userStore.isLoggedIn, 'navigateTo')
 }
 
 const fetchList = async (refresh = false) => {
@@ -204,6 +214,9 @@ const fetchList = async (refresh = false) => {
       finished.value = true
     }
   } catch (e) {
+    if (refresh || !items.value.length) {
+      uni.showToast({ title: '作品加载失败', icon: 'none' })
+    }
   } finally {
     loading.value = false
     if (refresh) uni.stopPullDownRefresh()
@@ -235,8 +248,11 @@ const handleDelete = (id: string) => {
             method: 'DELETE'
           })
           uni.showToast({ title: '已删除', icon: 'success' })
-          fetchList(true)
-        } catch (err) {}
+          removeItemsByIds([id])
+          try { uni.setStorageSync('works_refresh', '1') } catch {}
+        } catch (err) {
+          uni.showToast({ title: '删除失败', icon: 'none' })
+        }
       }
     }
   })
@@ -287,6 +303,8 @@ onReachBottom(() => {
   background-color: var(--bg-color);
   color: var(--text-color);
   padding-bottom: env(safe-area-inset-bottom);
+  width: 100%;
+  overflow-x: hidden;
 }
 
 .nav-bar {
@@ -336,12 +354,14 @@ onReachBottom(() => {
   flex-wrap: wrap;
   padding: 10rpx;
   padding-bottom: calc(120rpx + env(safe-area-inset-bottom));
+  width: 100%;
 }
 
 .video-card {
   width: 50%;
   padding: 10rpx;
   box-sizing: border-box;
+  min-width: 0;
 }
 
 .cover-wrap {
@@ -404,12 +424,15 @@ onReachBottom(() => {
 
 .info {
   padding: 16rpx 8rpx 12rpx;
+  min-width: 0;
 }
 
 .meta-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12rpx;
+  min-width: 0;
 }
 
 .status-tag {
@@ -441,11 +464,13 @@ onReachBottom(() => {
   overflow: hidden;
   height: 80rpx;
   margin-bottom: 8rpx;
+  word-break: break-word;
 }
 
 .meta {
   display: flex;
   align-items: center;
+  min-width: 0;
 }
 
 .meta-text {

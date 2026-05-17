@@ -138,6 +138,8 @@ const goLicense = () => {
   color: var(--text-color);
   display: flex;
   flex-direction: column;
+  width: 100%;
+  overflow-x: hidden;
 }
 
 .nav-bar {
@@ -167,6 +169,8 @@ const goLicense = () => {
 .content {
   flex: 1;
   overflow: hidden;
+  width: 100%;
+  min-width: 0;
 }
 
 .hero {
@@ -213,11 +217,14 @@ const goLicense = () => {
   padding: 40rpx 32rpx 24rpx;
   display: flex;
   justify-content: center;
+  min-width: 0;
 }
 
 .copyright {
   font-size: 24rpx;
   color: var(--text-muted);
+  max-width: 100%;
+  word-break: break-word;
 }
 
 .safe-bottom {

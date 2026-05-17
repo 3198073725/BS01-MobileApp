@@ -126,6 +126,7 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import request, { getBaseUrl } from '@/utils/request'
+import { ensureLogin as ensureAuth } from '@/utils/auth'
 import { useUserStore } from '@/store/user'
 
 const userStore = useUserStore()
@@ -177,11 +178,7 @@ const visibilityLabel = computed(() => {
 })
 
 const ensureLogin = () => {
-  if (!userStore.isLoggedIn) {
-    uni.navigateTo({ url: '/pages/auth/login' })
-    return false
-  }
-  return true
+  return ensureAuth(userStore.isLoggedIn, 'navigateTo')
 }
 
 const goBack = () => {
@@ -255,7 +252,9 @@ const onTagConfirm = async () => {
       data: { name }
     })
     addTag(res)
-  } catch (err) {}
+  } catch (err) {
+    uni.showToast({ title: '标签创建失败', icon: 'none' })
+  }
 }
 
 const onCategoryChange = (e: any) => {
@@ -327,6 +326,7 @@ const save = async () => {
       uni.redirectTo({ url: `/pages/video/detail?id=${encodeURIComponent(vid.value)}` })
     }, 600)
   } catch (err) {
+    uni.showToast({ title: '保存失败', icon: 'none' })
   } finally {
     saving.value = false
   }
@@ -430,6 +430,7 @@ onLoad(async (options: any) => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  width: 100%;
 }
 
 .nav-bar {
@@ -471,6 +472,8 @@ onLoad(async (options: any) => {
   height: 0;
   min-height: 0;
   overflow-y: auto;
+  width: 100%;
+  min-width: 0;
 }
 
 .card {
@@ -479,6 +482,8 @@ onLoad(async (options: any) => {
   border-radius: 16rpx;
   overflow: hidden;
   box-shadow: 0 10rpx 20rpx rgba(0, 0, 0, 0.05);
+  width: auto;
+  max-width: calc(100% - 48rpx);
 }
 
 .preview {
@@ -523,11 +528,15 @@ onLoad(async (options: any) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16rpx;
+  min-width: 0;
 }
 
 .placeholder-text {
   color: var(--text-muted);
   font-size: 28rpx;
+  flex: 1;
+  min-width: 0;
 }
 
 .tag-input-wrap {
@@ -592,14 +601,19 @@ onLoad(async (options: any) => {
   display: flex;
   align-items: center;
   gap: 16rpx;
+  min-width: 0;
 }
 
 .thumb-ts {
   flex: 1;
+  min-width: 0;
   padding: 14rpx 16rpx;
   border-radius: 12rpx;
   background-color: #f1f2f4;
   font-size: 28rpx;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .hint {

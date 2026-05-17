@@ -40,9 +40,31 @@ VidSprout 移动端是基于 UniApp + Vue 3 打造的跨平台原生体验应用
 - 使用 HBuilderX 导入本项目。
 - 运行 -> 运行到浏览器 -> H5 / 运行到手机或模拟器。
 
-### 3. 注意事项
+### 3. API 地址注入
+- 开发环境可复制 `.env.development.example` 为 `.env.development`。
+- 生产环境可复制 `.env.production.example` 为 `.env.production`。
+- `VITE_APP_API_BASE` 用于给小程序 / App / H5 注入默认 API 地址。
+- `VITE_DEV_API_ORIGIN` 用于 H5 本地开发代理目标；未填写时会回退到 `VITE_APP_API_BASE`。
+- `VITE_DEV_ALLOWED_HOST` 用于本地开发时允许访问的 Host，默认 `mobile.bs01.local`。
+
+开发示例：
+
+```env
+VITE_APP_API_BASE=http://192.168.1.50:8000
+VITE_DEV_API_ORIGIN=http://127.0.0.1:8000
+VITE_DEV_ALLOWED_HOST=mobile.bs01.local
+```
+
+生产示例：
+
+```env
+VITE_APP_API_BASE=https://api.example.com
+VITE_DEV_ALLOWED_HOST=mobile.example.local
+```
+
+### 4. 注意事项
 - **H5 滚动优化**: 针对 H5 端全局 `position:fixed` 锁定问题，已在法律协议等页面实现动态解锁机制。
-- **环境配置**: 接口地址由 `utils/request.ts` 中的 `BASE_URL` 统一管理。
+- **环境配置**: 接口地址优先级为“用户手动填写 > `VITE_APP_API_BASE` > H5 当前域名推导/manifest 注入”。
 
 ## 🎨 视觉规范
 - **品牌色**: `#fb7299`

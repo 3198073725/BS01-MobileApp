@@ -88,12 +88,15 @@ const fetchVideos = async (refresh = false) => {
       },
       noAuth: true
     })
+    const hasNext = typeof res?.has_next === 'boolean' ? res.has_next : !!res?.next
     const list = res.results || []
     items.value = refresh ? list : [...items.value, ...list]
-    if (!res.next) finished.value = true
+    if (!hasNext) finished.value = true
     else page.value++
   } catch (err) {
-    finished.value = true
+    if (refresh || !items.value.length) {
+      uni.showToast({ title: '分类视频加载失败', icon: 'none' })
+    }
   } finally {
     loading.value = false
     refreshing.value = false
@@ -142,6 +145,8 @@ onLoad((options: any) => {
   color: var(--text-color);
   display: flex;
   flex-direction: column;
+  width: 100%;
+  overflow-x: hidden;
 }
 
 /* 适配 Vant NavBar 深色模式 */
@@ -164,6 +169,8 @@ onLoad((options: any) => {
 .sort-tabs {
   display: flex;
   gap: 40rpx;
+  width: 100%;
+  overflow-x: auto;
 }
 
 .sort-tabs text {
@@ -179,6 +186,8 @@ onLoad((options: any) => {
 .video-scroll {
   flex: 1;
   overflow: hidden;
+  width: 100%;
+  min-width: 0;
 }
 
 .video-grid {
@@ -186,12 +195,14 @@ onLoad((options: any) => {
   flex-wrap: wrap;
   padding: 10rpx;
   gap: 0;
+  width: 100%;
 }
 
 .video-card {
   width: 50%;
   padding: 10rpx;
   box-sizing: border-box;
+  min-width: 0;
 }
 
 .cover-wrap {
@@ -227,6 +238,7 @@ onLoad((options: any) => {
 
 .info {
   padding: 12rpx 4rpx;
+  min-width: 0;
 }
 
 .title {
@@ -239,6 +251,7 @@ onLoad((options: any) => {
   -webkit-line-clamp: 2;
   overflow: hidden;
   margin-bottom: 8rpx;
+  word-break: break-word;
 }
 
 .author {

@@ -7,6 +7,9 @@ node_modules
 /build
 
 # Env
+.env
+.env.development
+.env.production
 .env.local
 .env.*.local
 

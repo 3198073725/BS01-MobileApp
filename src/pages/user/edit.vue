@@ -153,6 +153,7 @@ const handleSendVerifyEmail = async () => {
       }
     })
   } catch {
+    uni.showToast({ title: '发送验证邮件失败', icon: 'none' })
   } finally {
     verifying.value = false
   }
@@ -232,6 +233,7 @@ const handleSave = async () => {
     setTimeout(() => uni.navigateBack(), 1500)
   } catch (err) {
     console.error(err)
+    uni.showToast({ title: '保存失败', icon: 'none' })
   } finally {
     loading.value = false
   }

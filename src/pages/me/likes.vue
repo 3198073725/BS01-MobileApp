@@ -65,6 +65,7 @@
 import { ref, onMounted, computed, onUnmounted } from 'vue'
 import { onPullDownRefresh, onReachBottom, onShow } from '@dcloudio/uni-app'
 import request from '@/utils/request'
+import { ensureLogin as ensureAuth } from '@/utils/auth'
 import { useUserStore } from '@/store/user'
 import { formatImageUrl } from '@/utils/image'
 
@@ -131,6 +132,15 @@ const onCardClick = (v: any) => {
   }
 }
 
+const removeItemsByIds = (ids: string[]) => {
+  const idSet = new Set(ids.map((id) => String(id)))
+  items.value = items.value.filter((item) => !idSet.has(String(item.id)))
+  selectedIds.value = selectedIds.value.filter((id) => !idSet.has(String(id)))
+  if (!items.value.length) {
+    finished.value = true
+  }
+}
+
 const handleBulkDelete = () => {
   if (selectedIds.value.length === 0) return
   uni.showModal({
@@ -146,21 +156,19 @@ const handleBulkDelete = () => {
             data: { video_ids: selectedIds.value }
           })
           uni.showToast({ title: '已取消', icon: 'success' })
+          removeItemsByIds(selectedIds.value)
           isManageMode.value = false
           selectedIds.value = []
-          fetchList(true)
-        } catch (err) {}
+        } catch (err) {
+          uni.showToast({ title: '取消点赞失败', icon: 'none' })
+        }
       }
     }
   })
 }
 
 const ensureLogin = () => {
-  if (!userStore.isLoggedIn) {
-    uni.navigateTo({ url: '/pages/auth/login' })
-    return false
-  }
-  return true
+  return ensureAuth(userStore.isLoggedIn, 'navigateTo')
 }
 
 const fetchList = async (refresh = false) => {
@@ -185,6 +193,9 @@ const fetchList = async (refresh = false) => {
       finished.value = true
     }
   } catch (e) {
+    if (refresh || !items.value.length) {
+      uni.showToast({ title: '点赞记录加载失败', icon: 'none' })
+    }
   } finally {
     loading.value = false
     if (refresh) uni.stopPullDownRefresh()
@@ -212,10 +223,6 @@ const formatCount = (count: number) => {
   return (n / 10000).toFixed(1) + 'w'
 }
 
-onMounted(() => {
-  fetchList(true)
-})
-
 onShow(() => {
   if (!userStore.isLoggedIn) return
   if (!items.value.length) fetchList(true)
@@ -236,6 +243,8 @@ onReachBottom(() => {
   background-color: var(--bg-color);
   color: var(--text-color);
   padding-bottom: env(safe-area-inset-bottom);
+  width: 100%;
+  overflow-x: hidden;
 }
 
 .nav-bar {
@@ -293,12 +302,14 @@ onReachBottom(() => {
   flex-wrap: wrap;
   padding: 10rpx;
   padding-bottom: calc(120rpx + env(safe-area-inset-bottom));
+  width: 100%;
 }
 
 .video-card {
   width: 50%;
   padding: 10rpx;
   box-sizing: border-box;
+  min-width: 0;
 }
 
 .cover-wrap {
@@ -349,6 +360,7 @@ onReachBottom(() => {
 
 .info {
   padding: 16rpx 8rpx 12rpx;
+  min-width: 0;
 }
 
 .title {
@@ -363,11 +375,13 @@ onReachBottom(() => {
   overflow: hidden;
   height: 80rpx;
   margin-bottom: 8rpx;
+  word-break: break-word;
 }
 
 .meta {
   display: flex;
   align-items: center;
+  min-width: 0;
 }
 
 .meta-text {

@@ -68,7 +68,9 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
 import request from '@/utils/request'
+import { completeLoginRedirect } from '@/utils/auth'
 import { useUserStore } from '@/store/user'
 
 const theme = ref(uni.getStorageSync('theme') || 'light')
@@ -93,6 +95,7 @@ const loading = ref(false)
 const timer = ref<any>(null)
 const countdown = ref(60)
 const userStore = useUserStore()
+const redirectTarget = ref('')
 
 const onUsernameChange = (v: any) => {
   username.value = v === undefined || v === null ? '' : String(v)
@@ -192,13 +195,16 @@ const handleLogin = async () => {
 
     if (res.access) {
       userStore.setToken(res.access)
+      if (res.refresh) {
+        uni.setStorageSync('refreshToken', res.refresh)
+      }
       // 获取用户信息
       const userInfo = await request({ url: '/api/users/me/' })
       userStore.setUserInfo(userInfo)
 
       uni.showToast({ title: '登录成功', icon: 'success' })
       setTimeout(() => {
-        uni.switchTab({ url: '/pages/index/index' })
+        completeLoginRedirect(redirectTarget.value)
       }, 1500)
     } else {
       uni.showToast({ title: '登录失败，请重试', icon: 'none' })
@@ -213,6 +219,10 @@ const handleLogin = async () => {
 const goToForgot = () => {
   uni.navigateTo({ url: '/pages/auth/forgot' })
 }
+
+onLoad((options: any) => {
+  redirectTarget.value = options?.redirect ? String(options.redirect) : ''
+})
 </script>
 
 <style scoped>

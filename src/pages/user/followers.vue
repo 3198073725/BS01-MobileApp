@@ -40,6 +40,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import request from '@/utils/request'
+import { redirectToLoginOnce } from '@/utils/auth'
 import { useUserStore } from '@/store/user'
 import { formatImageUrl } from '@/utils/image'
 
@@ -63,6 +64,17 @@ const page = ref(1)
 const loading = ref(false)
 const finished = ref(false)
 
+const exitProtectedPage = () => {
+  setTimeout(() => {
+    const pages = getCurrentPages()
+    if (pages.length > 1) {
+      uni.navigateBack()
+    } else {
+      uni.switchTab({ url: '/pages/user/profile' })
+    }
+  }, 250)
+}
+
 const fetchList = async (refresh = false) => {
   if (loading.value || (finished.value && !refresh)) return
   
@@ -80,18 +92,22 @@ const fetchList = async (refresh = false) => {
         page: page.value,
         page_size: 20
       },
-      noAuth: true
+      noAuth: !userStore.isLoggedIn
     })
-    
+    const hasNext = typeof res?.has_next === 'boolean' ? res.has_next : !!res?.next
     const list = res.results || []
     userList.value = refresh ? list : [...userList.value, ...list]
-    
-    if (!res.next) {
+
+    if (!hasNext) {
       finished.value = true
     } else {
       page.value++
     }
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.statusCode === 401 || err?.statusCode === 403) {
+      exitProtectedPage()
+      return
+    }
     console.error('Fetch followers error:', err)
   } finally {
     loading.value = false
@@ -99,7 +115,7 @@ const fetchList = async (refresh = false) => {
 }
 
 const handleFollow = async (user: any) => {
-  if (!userStore.isLoggedIn) return uni.navigateTo({ url: '/pages/auth/login' })
+  if (!userStore.isLoggedIn) return redirectToLoginOnce('navigateTo')
   try {
     const method = user.is_following ? 'unfollow' : 'follow'
     const res = await request({
@@ -112,7 +128,9 @@ const handleFollow = async (user: any) => {
       title: user.is_following ? '已关注' : '已取消关注',
       icon: 'none'
     })
-  } catch (err) {}
+  } catch (err) {
+    uni.showToast({ title: '操作失败，请稍后重试', icon: 'none' })
+  }
 }
 
 const goToUser = (id: string) => {
@@ -141,6 +159,8 @@ onLoad((options: any) => {
   flex-direction: column;
   background-color: var(--bg-color);
   color: var(--text-color);
+  width: 100%;
+  overflow-x: hidden;
 }
 
 .nav-bar {
@@ -176,6 +196,9 @@ onLoad((options: any) => {
 
 .list-scroll {
   flex: 1;
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 .user-list {
@@ -185,8 +208,10 @@ onLoad((options: any) => {
 .user-item {
   display: flex;
   align-items: center;
+  gap: 20rpx;
   padding: 30rpx 0;
   border-bottom: 1rpx solid var(--border-color);
+  min-width: 0;
 }
 
 .avatar {
@@ -199,8 +224,7 @@ onLoad((options: any) => {
 
 .info {
   flex: 1;
-  margin-left: 24rpx;
-  margin-right: 20rpx;
+  min-width: 0;
   overflow: hidden;
 }
 
@@ -210,6 +234,9 @@ onLoad((options: any) => {
   color: var(--text-color);
   display: block;
   margin-bottom: 8rpx;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .bio {
@@ -229,6 +256,7 @@ onLoad((options: any) => {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .follow-btn.followed {

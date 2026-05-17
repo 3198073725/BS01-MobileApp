@@ -52,7 +52,7 @@
           class="notification-item"
           @click="handleNotificationClick(item)"
         >
-          <view class="unread-dot" v-if="activeTab === 'system' ? !item.is_read : !item.is_read"></view>
+          <view class="unread-dot" v-if="!isNotificationRead(item)"></view>
           <image
             v-if="activeTab !== 'system'"
             class="avatar" 
@@ -65,10 +65,10 @@
           </view>
           <view class="info">
             <view class="user-row">
-              <text class="user-name">{{ activeTab === 'system' ? '系统通知' : (item.actor?.nickname || item.actor?.username) }}</text>
+              <text class="user-name">{{ activeTab === 'system' ? '系统通知' : (item.actor?.display_name || item.actor?.nickname || item.actor?.username) }}</text>
               <text class="time">{{ formatDate(item.created_at) }}</text>
             </view>
-            <text class="content-text">{{ activeTab === 'system' ? (item.title || item.content || '') : item.content }}</text>
+            <text class="content-text">{{ activeTab === 'system' ? (item.title || item.content || '') : getNotificationContent(item) }}</text>
             
             <view class="video-preview" v-if="item.video">
               <image class="video-cover" :src="item.video.thumbnail_url" mode="aspectFill" />
@@ -104,8 +104,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
+import { redirectToLoginOnce } from '@/utils/auth'
 import request from '@/utils/request'
 import { formatImageUrl } from '@/utils/image'
 import { useUserStore } from '@/store/user'
@@ -116,7 +117,7 @@ const tabs = [
   { name: 'system', title: '系统消息', icon: 'bullhorn-o', bgColor: '#faad14' }
 ]
 
-const activeTab = ref('reply')
+const activeTab = ref('comment')
 const notifications = ref<any[]>([])
 const page = ref(1)
 const loading = ref(false)
@@ -133,6 +134,41 @@ const userStore = useUserStore()
 
 const showLoginPopup = ref(false)
 
+const isNotificationRead = (item: any) => {
+  if (activeTab.value === 'system') return !!item.is_read
+  return !!item.read
+}
+
+const syncUnreadBadge = async () => {
+  if (!userStore.isLoggedIn) {
+    try {
+      uni.removeTabBarBadge({ index: 2 })
+    } catch {}
+    return
+  }
+  try {
+    const [interactionsRes, announcementsRes] = await Promise.all([
+      request({
+        url: '/api/interactions/notifications/unread-count/',
+        silent: true
+      }),
+      request({
+        url: '/api/notifications/announcements/unread-count/',
+        silent: true
+      })
+    ])
+    const total = Number(interactionsRes?.unread || 0) + Number(announcementsRes?.unread || 0)
+    if (total > 0) {
+      uni.setTabBarBadge({
+        index: 2,
+        text: total > 99 ? '99+' : String(total)
+      })
+    } else {
+      uni.removeTabBarBadge({ index: 2 })
+    }
+  } catch {}
+}
+
 const ensureLoginWithChoice = () => {
   if (userStore.isLoggedIn) return true
 
@@ -142,12 +178,11 @@ const ensureLoginWithChoice = () => {
 
 const onLoginPopupCancel = () => {
   showLoginPopup.value = false
-  uni.switchTab({ url: '/pages/index/index' })
 }
 
 const onLoginPopupConfirm = () => {
   showLoginPopup.value = false
-  uni.navigateTo({ url: '/pages/auth/login' })
+  redirectToLoginOnce('navigateTo')
 }
 
 const onThemeChange = (t: string) => {
@@ -157,6 +192,10 @@ const onThemeChange = (t: string) => {
 onMounted(() => {
   uni.$on('menu:theme-change', onThemeChange)
   // 首次进入交给 onShow 统一处理（避免未登录时 onMounted/onShow 触发两次弹窗）
+})
+
+onUnmounted(() => {
+  uni.$off('menu:theme-change', onThemeChange)
 })
 
 watch(activeTab, () => {
@@ -205,10 +244,14 @@ const fetchNotifications = async (refresh = false) => {
         },
         noAuth: false
       })
-      const list = res.results || []
+      const hasNext = typeof res?.has_next === 'boolean' ? res.has_next : !!res?.next
+      const list = (res.results || []).map((item: any) => ({
+        ...item,
+        read: !!item.read
+      }))
       notifications.value = refresh ? list : [...notifications.value, ...list]
-      finished.value = !res.next
-      if (res.next) page.value++
+      finished.value = !hasNext
+      if (hasNext) page.value++
     }
   } catch (err) {
     console.error('Fetch notifications error:', err)
@@ -248,6 +291,7 @@ const handleMarkAllRead = () => {
             method: 'POST'
           })
           uni.showToast({ title: '已全部标记已读', icon: 'none' })
+          syncUnreadBadge()
           fetchNotifications(true)
         } catch (err) {}
       }
@@ -274,6 +318,7 @@ const handleClearAll = () => {
           uni.showToast({ title: '已清空', icon: 'none' })
           notifications.value = []
           finished.value = true
+          syncUnreadBadge()
         } catch (err) {}
       }
     }
@@ -283,6 +328,13 @@ const handleClearAll = () => {
 const onRefresh = () => {
   refreshing.value = true
   fetchNotifications(true)
+}
+
+const getNotificationContent = (item: any) => {
+  const base = getActionText(item)
+  const commentContent = String(item?.comment?.content || '').trim()
+  if (!commentContent) return base
+  return `${base}：${commentContent}`
 }
 
 const getActionText = (item: any) => {
@@ -325,13 +377,29 @@ const handleNotificationClick = (item: any) => {
             method: 'POST'
           })
           item.is_read = true
+          syncUnreadBadge()
         } catch (e) { /* no-op */ }
       }
     })
     return
   }
+  if (!item.read) {
+    request({
+      url: '/api/interactions/notifications/mark-read/',
+      method: 'POST',
+      data: { ids: [item.id] },
+      silent: true
+    }).then(() => {
+      item.read = true
+      syncUnreadBadge()
+    }).catch(() => {})
+  }
   if (item.video?.id) {
     goToVideo(item.video.id)
+    return
+  }
+  if (item.actor?.id) {
+    goToUser(item.actor.id)
   }
 }
 
@@ -361,7 +429,14 @@ const formatDate = (dateStr: string) => {
 }
 
 onShow(() => {
-  if (!ensureLoginWithChoice()) return
+  if (!userStore.isLoggedIn) {
+    notifications.value = []
+    finished.value = false
+    page.value = 1
+    syncUnreadBadge()
+    return
+  }
+  syncUnreadBadge()
   fetchNotifications(true)
 })
 </script>
@@ -427,6 +502,7 @@ onShow(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  width: 100%;
 }
 
 .nav-bar {
@@ -492,6 +568,8 @@ onShow(() => {
 .content {
   flex: 1;
   overflow: hidden;
+  width: 100%;
+  min-width: 0;
 }
 
 .notification-list {
@@ -500,11 +578,13 @@ onShow(() => {
 
 .notification-item {
   display: flex;
+  gap: 20rpx;
   padding: 24rpx;
   background-color: var(--card-bg);
   border-radius: 16rpx;
   margin-bottom: 20rpx;
   position: relative;
+  min-width: 0;
 }
 
 .unread-dot {
@@ -521,7 +601,6 @@ onShow(() => {
   width: 80rpx;
   height: 80rpx;
   border-radius: 50%;
-  margin-right: 20rpx;
   flex-shrink: 0;
   background-color: var(--bg-color);
 }
@@ -535,6 +614,7 @@ onShow(() => {
 
 .info {
   flex: 1;
+  min-width: 0;
   overflow: hidden;
 }
 
@@ -542,18 +622,26 @@ onShow(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16rpx;
   margin-bottom: 8rpx;
+  min-width: 0;
 }
 
 .user-name {
   font-size: 28rpx;
   font-weight: 700;
   color: var(--text-color);
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .time {
   font-size: 22rpx;
   color: var(--text-muted);
+  flex-shrink: 0;
 }
 
 .content-text {

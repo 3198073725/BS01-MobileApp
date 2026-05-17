@@ -26,9 +26,15 @@
             <text class="current-label">当前生效：</text>
             <text class="current-value">{{ effectiveBase }}</text>
           </view>
+          <view class="current">
+            <text class="current-label">恢复默认：</text>
+            <text class="current-value">{{ defaultBase || '未注入，请手动填写可访问地址' }}</text>
+          </view>
           <view class="tips">
             <text class="tip-line">- 需要以 http:// 或 https:// 开头</text>
             <text class="tip-line">- 不要以 / 结尾（会自动处理）</text>
+            <text class="tip-line">- 真机/小程序建议填写手机可访问的局域网 IP 或正式域名</text>
+            <text v-if="!defaultBase" class="tip-line">- 当前环境没有注入默认 API 地址，部署时应通过 manifest 或构建变量提供</text>
           </view>
         </van-cell-group>
       </view>
@@ -50,20 +56,47 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { getBaseUrl } from '@/utils/request'
+import { getBaseUrl, getDefaultBaseUrl } from '@/utils/request'
 import request from '@/utils/request'
+import { useConfigStore } from '@/store/config'
 
 const theme = ref(uni.getStorageSync('theme') || 'light')
+const configStore = useConfigStore()
 const apiBaseRaw = ref('')
 const testing = ref(false)
 const lastTestOk = ref<boolean | null>(null)
 const effectiveBase = ref('')
+const defaultBase = ref('')
+const showApiBase = computed(() => configStore.get('show_api_base', true))
+
+const guardAccess = async () => {
+  if (!Object.keys(configStore.configs || {}).length) {
+    try { await configStore.fetchConfigs() } catch (_) { /* no-op */ }
+  }
+  if (!showApiBase.value) {
+    uni.showToast({ title: 'API 地址入口已关闭', icon: 'none' })
+    setTimeout(() => {
+      uni.navigateBack({
+        fail: () => {
+          uni.reLaunch({ url: '/pages/settings/index' })
+        }
+      })
+    }, 120)
+    return false
+  }
+  return true
+}
 
 const refreshEffectiveBase = () => {
   try {
     effectiveBase.value = getBaseUrl()
   } catch {
     effectiveBase.value = ''
+  }
+  try {
+    defaultBase.value = getDefaultBaseUrl()
+  } catch {
+    defaultBase.value = ''
   }
 }
 
@@ -92,26 +125,28 @@ const normalize = (v: string) => {
 onMounted(() => {
   try {
     const current = uni.getStorageSync('api_base')
-    apiBaseRaw.value = typeof current === 'string' ? current : ''
+    apiBaseRaw.value = typeof current === 'string' && current ? current : getDefaultBaseUrl()
   } catch {
-    apiBaseRaw.value = ''
+    apiBaseRaw.value = getDefaultBaseUrl()
   }
 
   refreshEffectiveBase()
 })
 
 onShow(() => {
+  guardAccess()
   try {
     const current = uni.getStorageSync('api_base')
-    apiBaseRaw.value = typeof current === 'string' ? current : ''
+    apiBaseRaw.value = typeof current === 'string' && current ? current : getDefaultBaseUrl()
   } catch {
-    apiBaseRaw.value = ''
+    apiBaseRaw.value = getDefaultBaseUrl()
   }
 
   refreshEffectiveBase()
 })
 
 const save = () => {
+  if (!showApiBase.value) return
   const v = normalize(apiBaseRaw.value)
   if (!v) {
     uni.showToast({ title: '请输入 API 地址', icon: 'none' })
@@ -133,18 +168,20 @@ const save = () => {
 }
 
 const clear = () => {
+  if (!showApiBase.value) return
   try {
     uni.removeStorageSync('api_base')
-    apiBaseRaw.value = ''
+    apiBaseRaw.value = defaultBase.value || ''
     lastTestOk.value = null
     refreshEffectiveBase()
-    uni.showToast({ title: '已清除', icon: 'none' })
+    uni.showToast({ title: '已恢复默认', icon: 'none' })
   } catch {
     uni.showToast({ title: '清除失败', icon: 'none' })
   }
 }
 
 const testHealth = async () => {
+  if (!showApiBase.value) return
   testing.value = true
   lastTestOk.value = null
   try {
@@ -178,6 +215,8 @@ const testHealth = async () => {
   color: var(--text-color);
   display: flex;
   flex-direction: column;
+  width: 100%;
+  overflow-x: hidden;
 }
 
 .nav-bar {
@@ -212,6 +251,8 @@ const testHealth = async () => {
 .content {
   flex: 1;
   overflow: hidden;
+  width: 100%;
+  min-width: 0;
 }
 
 .group {
@@ -269,6 +310,9 @@ const testHealth = async () => {
 .current-value {
   font-size: 22rpx;
   color: var(--text-color);
+  display: block;
+  max-width: 100%;
+  word-break: break-all;
 }
 
 .tip-line {

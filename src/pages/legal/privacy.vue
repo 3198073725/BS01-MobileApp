@@ -158,6 +158,7 @@ const goBack = () => {
   font-size: 32rpx;
   font-weight: 700;
   color: var(--text-color);
+  min-width: 0;
 }
 
 .title-line {
@@ -181,6 +182,7 @@ const goBack = () => {
   line-height: 1.6;
   color: var(--text-color);
   opacity: 0.8;
+  word-break: break-word;
 }
 
 .p {
@@ -189,6 +191,7 @@ const goBack = () => {
   color: var(--text-color);
   opacity: 0.9;
   text-align: justify;
+  word-break: break-word;
 }
 
 .card-section.contact {

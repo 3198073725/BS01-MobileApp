@@ -31,7 +31,13 @@ export const useUserStore = defineStore('user', {
       this.token = '';
       this.userInfo = null;
       uni.removeStorageSync('token');
+      uni.removeStorageSync('refreshToken');
       uni.removeStorageSync('userInfo');
+      uni.removeStorageSync('login_redirect');
+      uni.removeStorageSync('login_intent');
+      try {
+        uni.removeTabBarBadge({ index: 2 });
+      } catch {}
     },
   },
 });

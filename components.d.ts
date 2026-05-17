@@ -20,12 +20,8 @@ declare module 'vue' {
     VanImage: typeof import('vant/es')['Image']
     VanLoading: typeof import('vant/es')['Loading']
     VanNavBar: typeof import('vant/es')['NavBar']
-    VanPicker: typeof import('vant/es')['Picker']
     VanPopup: typeof import('vant/es')['Popup']
-    VanProgress: typeof import('vant/es')['Progress']
     VanSearch: typeof import('vant/es')['Search']
-    VanTab: typeof import('vant/es')['Tab']
-    VanTabs: typeof import('vant/es')['Tabs']
-    VanTag: typeof import('vant/es')['Tag']
+    VideoDetailView: typeof import('./src/components/VideoDetailView.vue')['default']
   }
 }

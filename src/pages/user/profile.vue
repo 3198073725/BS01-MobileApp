@@ -93,6 +93,7 @@ import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useUserStore } from '@/store/user'
 import { useConfigStore } from '@/store/config'
+import { redirectToLoginOnce } from '@/utils/auth'
 import { formatImageUrl } from '@/utils/image'
 import request from '@/utils/request'
 
@@ -140,7 +141,15 @@ onUnmounted(() => {
 })
 
 const fetchProfileStats = async () => {
-  if (!userStore.isLoggedIn) return
+  if (!userStore.isLoggedIn) {
+    profileStats.value = {
+      liked_count: 0,
+      following_count: 0,
+      followers_count: 0,
+      video_count: 0
+    }
+    return
+  }
   try {
     const res = await request({
       url: '/api/users/popup/stats/'
@@ -157,7 +166,15 @@ const fetchProfileStats = async () => {
 }
 
 const fetchMe = async () => {
-  if (!userStore.isLoggedIn) return
+  if (!userStore.isLoggedIn) {
+    profileStats.value = {
+      liked_count: 0,
+      following_count: 0,
+      followers_count: 0,
+      video_count: 0
+    }
+    return
+  }
   try {
     const res = await request({ url: '/api/users/me/', silent: true })
     if (res) userStore.setUserInfo(res)
@@ -213,6 +230,7 @@ const handleScan = () => {
     },
     fail: (err) => {
       console.error('扫码失败：', err)
+      uni.showToast({ title: '扫码已取消或失败', icon: 'none' })
     }
   })
 }
@@ -247,7 +265,7 @@ const handleAvatarLongPress = () => {
 }
 
 const goToLogin = () => {
-  uni.navigateTo({ url: '/pages/auth/login' })
+  redirectToLoginOnce('navigateTo')
 }
 
 const ensureLogin = (featureLabel = '该功能') => {
@@ -325,6 +343,12 @@ const handleLogout = () => {
     confirmColor: '#fa5151',
     success: (res) => {
       if (res.confirm) {
+        profileStats.value = {
+          liked_count: 0,
+          following_count: 0,
+          followers_count: 0,
+          video_count: 0
+        }
         userStore.logout()
         uni.switchTab({ url: '/pages/index/index' })
       }
@@ -394,11 +418,14 @@ const handleLogout = () => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  width: 100%;
 }
 
 .body-scroll {
   flex: 1;
   overflow: hidden;
+  width: 100%;
+  min-width: 0;
 }
 
 .scroll-spacer {
@@ -431,6 +458,7 @@ const handleLogout = () => {
   display: flex;
   align-items: center;
   margin-bottom: 40rpx;
+  min-width: 0;
 }
 
 .avatar {
@@ -445,6 +473,7 @@ const handleLogout = () => {
 .user-info-content {
   margin-left: 32rpx;
   flex: 1;
+  min-width: 0;
 }
 
 .nickname {
@@ -452,6 +481,9 @@ const handleLogout = () => {
   font-weight: bold;
   color: var(--text-color);
   display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .uid {
@@ -477,6 +509,7 @@ const handleLogout = () => {
   display: flex;
   justify-content: space-between;
   width: 100%;
+  min-width: 0;
 }
 
 .stat-box {
@@ -484,6 +517,7 @@ const handleLogout = () => {
   display: flex;
   flex-direction: column;
   align-items: center;
+  min-width: 0;
 }
 
 .num {

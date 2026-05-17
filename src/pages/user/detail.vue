@@ -1,283 +1,92 @@
 <template>
-  <view :class="['detail-container', theme]" v-if="videoDetail">
-    <!-- 视频区域 - 极简 -->
-    <view class="video-section">
-      <video
-        id="myVideo"
-        class="video-player"
-        :src="currentSrc"
-        :poster="currentPoster"
-        controls
-        autoplay
-        object-fit="contain"
-        @error="onVideoError"
-        @timeupdate="onTimeUpdate"
-        @loadedmetadata="applyResumePosition"
-        @click="togglePlay"
-      ></video>
-      
-      <!-- 播放器自定义控制浮层（对齐 Web 端清晰度/速度调节） -->
-      <view class="player-custom-controls">
-        <view class="ctrl-row">
-          <!-- 倍速调节 -->
-          <picker :range="rateOptions" :value="rateIndex" @change="handleRateChange">
-            <view class="ctrl-btn">
-              <text>{{ playbackRate }}x</text>
-            </view>
-          </picker>
-          
-          <!-- 清晰度调节（HLS 逻辑对齐） -->
-          <picker v-if="qualityOptions.length > 0" :range="qualityOptions" range-key="label" :value="qualityIndex" @change="handleQualityChange">
-            <view class="ctrl-btn">
-              <text>{{ currentQualityLabel }}</text>
-            </view>
-          </picker>
+  <view :class="['user-detail-container', theme]" v-if="userDetail">
+    <scroll-view scroll-y class="page-scroll" @scrolltolower="fetchUserVideos">
+      <view class="header">
+        <image class="avatar" :src="formatImageUrl(userDetail)" mode="aspectFill" />
+        <view class="meta">
+          <text class="nickname">{{ userDetail.nickname || userDetail.username }}</text>
+          <text class="username">ID: {{ userDetail.username }}</text>
         </view>
-      </view>
-    </view>
-
-    <!-- 内容区域 -->
-    <scroll-view scroll-y class="content-scroll" @scrolltolower="onScrollToLower">
-      <view class="main-info">
-        <text class="title">{{ videoDetail.title }}</text>
-
-        <view class="sub-row">
-          <text class="sub-text">{{ formatCount(videoDetail.view_count) }} 播放</text>
-          <text class="sub-dot">·</text>
-          <text class="sub-text">{{ formatDate(videoDetail.created_at) }}</text>
-        </view>
-
-        <view class="up-row">
-          <view class="up-left" @click="goToUser(authorId)">
-            <image
-              class="up-avatar"
-              :src="formatImageUrl(authorDetail || videoDetail.author)"
-              mode="aspectFill"
-            />
-            <view class="up-meta">
-              <text class="up-name">{{ authorDetail?.nickname || videoDetail.author?.name || videoDetail.author?.username }}</text>
-              <text class="up-fans">{{ formatCount(authorDetail?.followers_count || 0) }} 粉丝</text>
-            </view>
-          </view>
-          <view
-            v-if="!isOwner"
-            class="follow-btn"
-            :class="{ followed: isFollowing }"
-            @click="handleFollow"
+        <view v-if="!isMe" class="follow" @click="handleFollow">
+          <van-button
+            size="small"
+            :type="isFollowing ? 'default' : 'primary'"
+            round
+            :loading="followLoading"
           >
-            <text class="follow-text">{{ isFollowing ? '已关注' : '+ 关注' }}</text>
-          </view>
-        </view>
-
-        <view class="desc-card" :class="{ expanded: isDescExpanded }">
-          <text class="desc-text">{{ videoDetail.description || '暂无简介' }}</text>
-          <view v-if="hasLongDescription" class="expand-toggle" @click="isDescExpanded = !isDescExpanded">
-            <text class="toggle-text">{{ isDescExpanded ? '收起' : '展开更多' }}</text>
-            <van-icon :name="isDescExpanded ? 'arrow-up' : 'arrow-down'" size="12px" color="var(--text-muted)" />
-          </view>
-        </view>
-
-        <!-- 标签展示 -->
-        <view class="tag-row" v-if="videoDetail.tags && videoDetail.tags.length > 0">
-          <view class="tag-item" v-for="tag in videoDetail.tags" :key="tag.id">
-            <text># {{ tag.name }}</text>
-          </view>
-        </view>
-      </view>
-
-      <!-- 评论区 -->
-      <view class="comment-section">
-        <view class="comment-header">
-          <view class="comment-title-row">
-            <text class="comment-title">评论 {{ formatCount(videoDetail.comment_count || 0) }}</text>
-            <view class="sort-tabs">
-              <text :class="{ active: commentSort === 'hot' }" @click="handleSortComments('hot')">按热度</text>
-              <text class="sort-divider">|</text>
-              <text :class="{ active: commentSort === 'new' }" @click="handleSortComments('new')">按时间</text>
-            </view>
-          </view>
-        </view>
-
-        <!-- 发表评论 -->
-        <view class="comment-input-area" v-if="userStore.isLoggedIn">
-          <image 
-            class="user-avatar" 
-            :src="formatImageUrl(userStore.userInfo)" 
-            mode="aspectFill" 
-          />
-          <view class="input-box" @click="handleReply(null)">
-            <text class="placeholder">发条友善的评论吧</text>
-          </view>
-        </view>
-
-        <!-- 评论列表 -->
-        <view class="comment-list">
-          <view v-for="comment in commentList" :key="comment.id" class="comment-item">
-            <image class="comment-avatar" :src="formatImageUrl(comment.user)" mode="aspectFill" />
-            <view class="comment-main">
-              <view class="comment-user">
-                <text class="user-name">{{ comment.user?.nickname || comment.user?.username }}</text>
-              </view>
-              <text class="comment-content">{{ comment.content }}</text>
-              <view class="comment-footer">
-                <text class="comment-date">{{ formatDate(comment.created_at) }}</text>
-                <view class="comment-actions">
-                  <view class="action-btn" :class="{ active: comment.is_liked }" @click="handleLikeComment(comment)">
-                    <van-icon :name="comment.is_liked ? 'good-job' : 'good-job-o'" size="14px" :color="comment.is_liked ? '#1989fa' : 'var(--text-muted)'" />
-                    <text class="action-num">{{ comment.like_count || '' }}</text>
-                  </view>
-                  <text class="reply-btn" @click="handleReply(comment)">回复</text>
-                  <text v-if="canDeleteComment(comment)" class="delete-btn" @click="handleDeleteComment(comment)">删除</text>
-                </view>
-              </view>
-
-              <!-- 二级评论区域 -->
-              <view v-if="comment.replies_count > 0 || (comment._replies && comment._replies.length > 0)" class="replies-container">
-                <view v-if="!comment._showReplies" class="expand-replies" @click="toggleReplies(comment)">
-                  <text class="expand-text">展开 {{ comment.replies_count }} 条回复</text>
-                  <van-icon name="arrow-down" size="12px" color="#1989fa" />
-                </view>
-                
-                <view v-else class="replies-list">
-                  <view v-for="reply in comment._replies" :key="reply.id" class="reply-item">
-                    <image class="reply-avatar" :src="formatImageUrl(reply.user)" mode="aspectFill" />
-                    <view class="reply-main">
-                      <view class="reply-user">
-                        <text class="user-name">{{ reply.user?.nickname || reply.user?.username }}</text>
-                        <text v-if="reply.parent && reply.parent !== comment.id" class="reply-to">
-                          回复 <text class="reply-to-name">@{{ getReplyTargetName(reply, comment) }}</text>
-                        </text>
-                      </view>
-                      <text class="reply-content">{{ reply.content }}</text>
-                      <view class="comment-footer">
-                        <text class="comment-date">{{ formatDate(reply.created_at) }}</text>
-                        <view class="comment-actions">
-                          <view class="action-btn" :class="{ active: reply.is_liked }" @click="handleLikeComment(reply)">
-                            <van-icon :name="reply.is_liked ? 'good-job' : 'good-job-o'" size="12px" :color="reply.is_liked ? '#1989fa' : 'var(--text-muted)'" />
-                            <text class="action-num">{{ reply.like_count || '' }}</text>
-                          </view>
-                          <text class="reply-btn" @click="handleReply(reply, comment)">回复</text>
-                          <text v-if="canDeleteComment(reply)" class="delete-btn" @click="handleDeleteComment(reply, comment)">删除</text>
-                        </view>
-                      </view>
-                    </view>
-                  </view>
-                  
-                  <view v-if="comment._repliesHasNext" class="more-replies" @click="loadMoreReplies(comment)">
-                    <text class="more-text">加载更多回复</text>
-                  </view>
-                  <view class="collapse-replies" @click="toggleReplies(comment)">
-                    <text class="expand-text">收起回复</text>
-                    <van-icon name="arrow-up" size="12px" color="#1989fa" />
-                  </view>
-                </view>
-              </view>
-            </view>
-          </view>
-
-          <view v-if="!commentsLoading && commentsFinished && commentList.length === 0" class="empty-comments">
-            <text class="empty-text">暂无评论</text>
-          </view>
-          
-          <view class="list-status">
-            <van-loading v-if="commentsLoading" size="16px">加载中...</van-loading>
-            <text v-else-if="commentsFinished" class="no-more">没有更多了</text>
-          </view>
-        </view>
-      </view>
-    </scroll-view>
-
-    <!-- 评论输入弹窗 -->
-    <van-popup
-      v-model:show="showCommentInput"
-      position="bottom"
-      round
-      custom-style="padding: 24rpx;"
-    >
-      <view class="popup-input-wrap">
-        <van-field
-          :model-value="commentContent"
-          @update:model-value="onCommentContentChange"
-          type="textarea"
-          :placeholder="replyTarget ? `回复 @${replyTarget.user?.nickname || replyTarget.user?.username}` : '发条友善的评论吧'"
-          autosize
-          :border="false"
-          focus
-          class="comment-field"
-        />
-        <view class="popup-footer">
-          <van-button 
-            type="primary" 
-            size="small" 
-            round 
-            :loading="submitting"
-            @click="submitComment"
-            :disabled="!String(commentContent || '').trim()"
-          >
-            发布
+            {{ isFollowing ? '已关注' : '+ 关注' }}
           </van-button>
         </view>
       </view>
-    </van-popup>
 
-    <!-- 底部交互 - 纯净线条 -->
-    <view class="bottom-bar">
-      <view class="action-item" :class="{ active: videoDetail.liked }" @click="handleLike">
-        <van-icon :name="videoDetail.liked ? 'good-job' : 'good-job-o'" size="22px" :color="videoDetail.liked ? '#1989fa' : 'var(--text-color)'" />
-        <text class="action-text">{{ formatCount(videoDetail.like_count || 0) }}</text>
-      </view>
-      <view class="action-item" :class="{ active: videoDetail.favorited }" @click="handleCollect">
-        <van-icon :name="videoDetail.favorited ? 'star' : 'star-o'" size="22px" :color="videoDetail.favorited ? '#1989fa' : 'var(--text-color)'" />
-        <text class="action-text">{{ formatCount(videoDetail.collect_count || 0) }}</text>
-      </view>
-      <view class="action-item">
-        <van-icon name="comment-o" size="22px" color="var(--text-color)" />
-        <text class="action-text">{{ formatCount(videoDetail.comment_count || 0) }}</text>
-      </view>
-      <view class="action-item" @click="handleShare">
-        <van-icon name="share-o" size="22px" color="var(--text-color)" />
-        <text class="action-text">分享</text>
-      </view>
-    </view>
-
-    <!-- 分享/更多操作弹窗 -->
-    <van-popup
-      v-model:show="showSharePopup"
-      position="bottom"
-      round
-      custom-style="padding: 40rpx 20rpx 100rpx;"
-    >
-      <view class="share-title">更多操作</view>
-      <view class="share-grid">
-        <view class="share-item" @click="handleCopyLink">
-          <view class="icon-wrap gray">
-            <van-icon name="link-o" size="24px" />
-          </view>
-          <text class="share-text">复制链接</text>
+      <view class="stats">
+        <view class="stat-item" :class="{ locked: !canViewFollowLists }" @click="goToFollowing">
+          <text class="count">{{ formatCount(userDetail.following_count || 0) }}</text>
+          <text class="label">关注</text>
         </view>
-        <view class="share-item" @click="handleToggleWatchLater">
-          <view class="icon-wrap" :class="{ active: videoDetail.watch_later }">
-            <van-icon :name="videoDetail.watch_later ? 'clock' : 'clock-o'" size="24px" />
-          </view>
-          <text class="share-text">{{ videoDetail.watch_later ? '取消稍后看' : '稍后再看' }}</text>
+        <view class="stat-item" :class="{ locked: !canViewFollowLists }" @click="goToFollowers">
+          <text class="count">{{ formatCount(userDetail.followers_count || 0) }}</text>
+          <text class="label">粉丝</text>
+        </view>
+        <view class="stat-item">
+          <text class="count">{{ formatCount(userDetail.likes_count || userDetail.liked_count || 0) }}</text>
+          <text class="label">获赞</text>
         </view>
       </view>
-    </van-popup>
+
+      <view class="video-section">
+        <view class="section-tabs">
+          <text class="tab-item active">视频</text>
+          <text class="tab-count">{{ formatCount(totalVideos) }}</text>
+        </view>
+
+        <view class="video-grid" v-if="videoList.length > 0">
+          <view
+            v-for="video in videoList"
+            :key="video.id"
+            class="video-card"
+            @click="goToDetail(video.id)"
+          >
+            <view class="cover-wrap">
+              <image class="cover" :src="formatImageUrl(video)" mode="aspectFill" />
+              <view class="play-count">
+                <van-icon name="play-circle-o" color="#fff" size="12px" />
+                <text class="count-text">{{ formatCount(video.view_count || 0) }}</text>
+              </view>
+            </view>
+            <view class="video-info">
+              <text class="video-title">{{ video.title }}</text>
+              <text class="video-date">{{ formatDate(video.created_at) }}</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="empty-state" v-else-if="!videoLoading">
+          <van-empty image="search" description="TA 还没有发布过视频哦" />
+        </view>
+
+        <view class="loading-more" v-if="videoLoading">
+          <van-loading size="20px">加载中...</van-loading>
+        </view>
+      </view>
+    </scroll-view>
   </view>
 
-  <view v-else-if="loading" class="loading-state">
+  <view v-else-if="loading" class="loading">
     <van-loading size="24px" color="#1989fa">加载中...</van-loading>
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { onLoad, onHide } from '@dcloudio/uni-app'
+import { computed, onUnmounted, ref } from 'vue'
+import { onLoad, onPullDownRefresh, onShow } from '@dcloudio/uni-app'
+import request from '@/utils/request'
 import { useUserStore } from '@/store/user'
 import { formatImageUrl } from '@/utils/image'
-import request, { getBaseUrl } from '@/utils/request'
 
+const userStore = useUserStore()
 const theme = ref(uni.getStorageSync('theme') || 'light')
+
 const onThemeChange = (t: string) => {
   theme.value = t
 }
@@ -286,1253 +95,439 @@ onUnmounted(() => {
   uni.$off('menu:theme-change', onThemeChange)
 })
 
-const isPageActive = ref(true)
-let processingTimer: any = null
-const processingToastShown = ref(false)
-
-const clearProcessingTimer = () => {
-  if (processingTimer) {
-    clearTimeout(processingTimer)
-    processingTimer = null
-  }
-}
-
-const userStore = useUserStore()
-const videoId = ref('')
-const videoDetail = ref<any>(null)
+const userId = ref('')
+const userDetail = ref<any>(null)
 const loading = ref(true)
 
-const showSharePopup = ref(false)
-const isDescExpanded = ref(false)
-const commentSort = ref('hot')
+const videoList = ref<any[]>([])
+const videoPage = ref(1)
+const videoLoading = ref(false)
+const videoFinished = ref(false)
+const totalVideos = ref(0)
 
-const authorDetail = ref<any>(null)
 const isFollowing = ref(false)
+const isMutual = ref(false)
+const followedBy = ref(false)
+const followLoading = ref(false)
 
-const authorId = computed(() => {
-  return String(videoDetail.value?.author?.id || '')
+const isMe = computed(() => {
+  const me = userStore.userInfo
+  if (!me || !userId.value) return false
+  return String(me.id) === String(userId.value)
 })
 
-// 评论相关
-const commentList = ref<any[]>([])
-const commentPage = ref(1)
-const commentsLoading = ref(false)
-const commentsFinished = ref(false)
-const showCommentInput = ref(false)
-const commentContent = ref('')
-const submitting = ref(false)
-const replyTarget = ref<any>(null)
-const replyRoot = ref<any>(null)
-
-const onCommentContentChange = (v: any) => {
-  commentContent.value = v === undefined || v === null ? '' : String(v)
-}
-
-const isOwner = computed(() => {
-  return Boolean(videoDetail.value && userStore.userInfo && String(videoDetail.value?.author?.id || '') === String(userStore.userInfo.id))
+const canViewFollowLists = computed(() => {
+  if (isMe.value) return true
+  const mode = String(userDetail.value?.privacy_mode || 'public')
+  if (mode === 'private') return false
+  if (mode === 'friends_only') return isMutual.value
+  return true
 })
 
-const normalizeMediaUrl = (url?: string): string => {
-  if (!url) return ''
-  const u = String(url)
-  if (/^https?:\/\//i.test(u)) return u
-  if (/^blob:/i.test(u)) return u
-
-  const base = getBaseUrl().replace(/\/$/, '')
-  if (u.startsWith('/')) return `${base}${u}`
-  const rel = u.replace(/^\/+/, '')
-  const path = rel.includes('media/') ? rel : `media/${rel}`
-  return `${base}/${path}`
+const getFollowListDeniedMessage = () => {
+  if (isMe.value) return ''
+  const mode = String(userDetail.value?.privacy_mode || 'public')
+  if (mode === 'private') return '该用户的关注/粉丝列表不对外公开'
+  if (mode === 'friends_only') return '仅对互相关注用户可见'
+  return ''
 }
 
-const currentPoster = computed(() => {
-  return normalizeMediaUrl(videoDetail.value?.thumbnail_url)
-})
-
-const hasLongDescription = computed(() => {
-  return (videoDetail.value?.description || '').length > 60
-})
-
-const fetchAuthorDetail = async () => {
-  const uid = authorId.value
-  if (!uid) return
-  try {
-    const res = await request({
-      url: `/api/users/${uid}/`,
-      noAuth: !userStore.isLoggedIn,
-      silent: true
-    })
-    authorDetail.value = res
-  } catch {
-    authorDetail.value = null
-  }
-}
-
-const fetchComments = async (refresh = false) => {
-  if (commentsLoading.value || (commentsFinished.value && !refresh)) return
-  
-  if (refresh) {
-    commentPage.value = 1
-    commentsFinished.value = false
-    commentList.value = []
-  }
-  
-  commentsLoading.value = true
-  try {
-    const res = await request({
-      url: `/api/interactions/comments/`,
-      data: {
-        video_id: videoId.value,
-        page: commentPage.value,
-        page_size: 20,
-        order: commentSort.value === 'hot' ? 'hot' : '-created_at'
-      },
-      noAuth: true,
-      silent: true
-    })
-    
-    const list = res.results || []
-    const processedList = list.map((c: any) => ({
-      ...c,
-      _showReplies: false,
-      _replies: [],
-      _repliesPage: 1,
-      _repliesHasNext: false
-    }))
-    
-    commentList.value = refresh ? processedList : [...commentList.value, ...processedList]
-    
-    if (!res.next) {
-      commentsFinished.value = true
-    } else {
-      commentPage.value++
-    }
-  } catch (err: any) {
-    // 视频未发布(如 processing/draft) 时，后端会返回 404(NotFound: 资源不存在)
-    // 这里不应打扰用户，直接当作暂无评论处理。
-    if (err?.statusCode === 404 || err?.status === 404) {
-      commentList.value = []
-      commentsFinished.value = true
-      return
-    }
-    console.error('Fetch comments error:', err)
-  } finally {
-    commentsLoading.value = false
-  }
-}
-
-const videoContext = ref<any>(null)
-const lastSaveTs = ref(0)
-
-const saveResumePosition = () => {
-  if (!videoId.value || !videoContext.value) return
-  const now = Date.now()
-  if (now - lastSaveTs.value < 2000) return // 每2秒存一次
-  
-  // 检查是否开启了断点续播
-  const resumeEnabled = uni.getStorageSync('vp_resume') !== '0'
-  if (!resumeEnabled) return
-
-  videoContext.value.requestComponentInfo((res: any) => {
-    // 微信小程序/uniapp video context 获取当前时间的方法略有不同
-    // 这里采用 timeupdate 里的实时记录更稳妥，或者通过 getProxy
-  })
-}
-
-const isPlaying = ref(true)
-const playbackRate = ref(1.0)
-const rateOptions = ['0.5', '0.75', '1.0', '1.25', '1.5', '2.0']
-const rateIndex = ref(2) // 默认 1.0
-
-const qualityOptions = ref<any[]>([])
-const qualityIndex = ref(0)
-const currentSrc = ref('')
-
-const currentQualityLabel = computed(() => {
-  return qualityOptions.value[qualityIndex.value]?.label || '清晰度'
-})
-
-const togglePlay = () => {
-  videoContext.value = uni.createVideoContext('myVideo')
-  if (isPlaying.value) {
-    videoContext.value.pause()
-  } else {
-    videoContext.value.play()
-  }
-  isPlaying.value = !isPlaying.value
-}
-
-const handleRateChange = (e: any) => {
-  const idx = Number(e?.detail?.value ?? e?.target?.value)
-  if (!Number.isFinite(idx)) return
-  rateIndex.value = idx
-  const rate = parseFloat(rateOptions[idx])
-  if (!Number.isFinite(rate)) return
-  playbackRate.value = rate
-  videoContext.value = uni.createVideoContext('myVideo')
-  videoContext.value.playbackRate(rate)
-}
-
-const handleQualityChange = (e: any) => {
-  const idx = Number(e?.detail?.value ?? e?.target?.value)
-  if (!Number.isFinite(idx)) return
-  qualityIndex.value = idx
-  const option = qualityOptions.value[idx]
-  if (!option?.url) return
-  
-  // 记录当前播放时间，切换源后 seek 回去
-  videoContext.value = uni.createVideoContext('myVideo')
-  // 注意：uniapp video 无法直接获取当前时间，需要依赖 onTimeUpdate 记录的 currentTime
-  const lastPos = lastCurrentTime.value
-  
-  currentSrc.value = option.url
-  setTimeout(() => {
-    videoContext.value.seek(lastPos)
-    videoContext.value.play()
-  }, 200)
-}
-
-const lastCurrentTime = ref(0)
-
-const onTimeUpdate = (e: any) => {
-  const currentTime = e.detail.currentTime
-  lastCurrentTime.value = currentTime
-  if (!videoId.value) return
-  
-  const resumeEnabled = uni.getStorageSync('vp_resume') !== '0'
-  if (!resumeEnabled) return
-
-  const now = Date.now()
-  if (now - lastSaveTs.value >= 2000) {
-    lastSaveTs.value = now
-    uni.setStorageSync(`vp_pos:${videoId.value}`, currentTime)
-  }
-}
-
-const applyResumePosition = () => {
-  const resumeEnabled = uni.getStorageSync('vp_resume') !== '0'
-  if (!resumeEnabled) return
-
-  const savedPos = uni.getStorageSync(`vp_pos:${videoId.value}`)
-  if (savedPos > 0) {
-    videoContext.value = uni.createVideoContext('myVideo')
-    videoContext.value.seek(savedPos)
-    // uni.showToast({ title: `已恢复至上次播放位置`, icon: 'none' })
-  }
-}
-
-const fetchVideoDetail = async () => {
+const fetchUserDetail = async () => {
+  if (!userId.value) return
   loading.value = true
   try {
     const res = await request({
-      url: `/api/videos/${videoId.value}/`,
-      noAuth: !userStore.isLoggedIn
+      url: `/api/users/${encodeURIComponent(userId.value)}/`,
+      noAuth: !userStore.isLoggedIn,
+      silent: true,
     })
-    videoDetail.value = res
+    userDetail.value = res
 
-    const status = String((res as any)?.status || '')
-    const isProcessing = status && ['processing', 'pending', 'transcoding', 'queued'].includes(status)
-    if (isProcessing) {
-      if (!processingToastShown.value && isPageActive.value) {
-        processingToastShown.value = true
-        uni.showToast({ title: '视频处理中，稍后可播放', icon: 'none' })
-      }
-      clearProcessingTimer()
-      if (isPageActive.value) {
-        processingTimer = setTimeout(() => {
-          if (isPageActive.value) fetchVideoDetail()
-        }, 2500)
-      }
-    } else {
-      processingToastShown.value = false
-      clearProcessingTimer()
-    }
-    
-    const options: any[] = []
-
-    const hls = normalizeMediaUrl((res as any)?.hls_master_url)
-    const low = normalizeMediaUrl((res as any)?.low_mp4_url)
-    const raw = normalizeMediaUrl((res as any)?.video_url)
-
-    const supportsHls = (() => {
-      try {
-        if (typeof document === 'undefined') return false
-        const v = document.createElement('video')
-        const t1 = v.canPlayType('application/vnd.apple.mpegurl')
-        const t2 = v.canPlayType('application/x-mpegURL')
-        return Boolean(t1 || t2)
-      } catch {
-        return false
-      }
-    })()
-
-    // H5 下大多数浏览器/Android WebView 不能直接播放 m3u8；优先 mp4
-    const canUseHls = supportsHls
-
-    if (hls && canUseHls) options.push({ label: '自动', url: hls })
-    if (low) options.push({ label: '流畅', url: low })
-    if (raw) options.push({ label: '原始', url: raw })
-
-    qualityOptions.value = options
-    currentSrc.value = (hls && canUseHls) ? hls : (low || raw || '')
-
-    if (!currentSrc.value) {
-      uni.showToast({ title: '视频地址无效，暂无法播放', icon: 'none' })
-    }
-
-    try {
-      console.info('[video] sources resolved', {
-        hls,
-        low,
-        raw,
-        supportsHls,
-        currentSrc: currentSrc.value,
-      })
-    } catch { }
-    
-    // 检查是否有预设倍速
-    const savedRate = parseFloat(uni.getStorageSync('vp_rate'))
-    if (!isNaN(savedRate)) {
-      playbackRate.value = savedRate
-      const rIdx = rateOptions.findIndex(r => parseFloat(r) === savedRate)
-      if (rIdx > -1) rateIndex.value = rIdx
-    }
-    
-    // 获取真实的关注状态
-    if (userStore.isLoggedIn && authorId.value) {
+    if (userStore.isLoggedIn && !isMe.value) {
       try {
         const rel = await request({
-          url: `/api/interactions/relationship/?user_id=${authorId.value}`,
+          url: `/api/interactions/relationship/?user_id=${encodeURIComponent(userId.value)}`,
         })
         isFollowing.value = !!rel.following
+        followedBy.value = !!rel.followed_by
+        isMutual.value = !!rel.mutual
       } catch (e) {
-        isFollowing.value = Boolean(res?.is_following)
+        isFollowing.value = Boolean(res?.is_following || res?.following)
+        followedBy.value = false
+        isMutual.value = false
       }
     } else {
-      isFollowing.value = Boolean(res?.is_following)
+      isFollowing.value = Boolean(res?.is_following || res?.following)
+      followedBy.value = false
+      isMutual.value = false
     }
-    
-    fetchAuthorDetail()
-    fetchComments(true)
-  } catch (err) {
-    console.error('Fetch video detail error:', err)
-    uni.showToast({ title: '视频不存在或已删除', icon: 'none' })
+
+    fetchUserVideos(true)
+  } catch (e) {
+    userDetail.value = null
+    uni.showToast({ title: '用户不存在或已删除', icon: 'none' })
   } finally {
     loading.value = false
+    uni.stopPullDownRefresh()
   }
 }
 
-onHide(() => {
-  isPageActive.value = false
-  clearProcessingTimer()
-})
+const fetchUserVideos = async (refresh = false) => {
+  if (videoLoading.value || (videoFinished.value && !refresh)) return
 
-onUnmounted(() => {
-  isPageActive.value = false
-  clearProcessingTimer()
-})
+  if (refresh) {
+    videoPage.value = 1
+    videoFinished.value = false
+  }
 
-const loadReplies = async (comment: any, p = 1) => {
+  videoLoading.value = true
   try {
     const res = await request({
-      url: `/api/interactions/comments/replies/`,
+      url: '/api/videos/list/',
       data: {
-        parent_id: comment.id,
-        page: p,
-        page_size: 10
+        user_id: userId.value,
+        page: videoPage.value,
+        page_size: 18,
       },
       noAuth: true,
-      silent: true
     })
+
     const list = res.results || []
-    comment._replies = p === 1 ? list : [...(comment._replies || []), ...list]
-    comment._repliesPage = p
-    comment._repliesHasNext = !!res.next
-  } catch (err: any) {
-    if (err?.statusCode === 404 || err?.status === 404) {
-      comment._replies = []
-      comment._repliesHasNext = false
-      return
-    }
-    console.error('Load replies error:', err)
-  }
-}
+    totalVideos.value = res.total || 0
+    videoList.value = refresh ? list : [...videoList.value, ...list]
 
-const toggleReplies = async (comment: any) => {
-  comment._showReplies = !comment._showReplies
-  if (comment._showReplies && (!comment._replies || comment._replies.length === 0)) {
-    await loadReplies(comment, 1)
-  }
-}
-
-const loadMoreReplies = (comment: any) => {
-  if (comment._repliesHasNext) {
-    loadReplies(comment, (comment._repliesPage || 1) + 1)
-  }
-}
-
-const getReplyTargetName = (reply: any, root: any) => {
-  if (reply.parent === root.id) return ''
-  const parentComment = root._replies?.find((r: any) => r.id === reply.parent)
-  return parentComment?.user?.nickname || parentComment?.user?.username || ''
-}
-
-const handleReply = (target: any, root?: any) => {
-  if (!userStore.isLoggedIn) return uni.navigateTo({ url: '/pages/auth/login' })
-  replyTarget.value = target
-  replyRoot.value = root || target
-  commentContent.value = ''
-  showCommentInput.value = true
-}
-
-const submitComment = async () => {
-  if (!userStore.isLoggedIn) return uni.navigateTo({ url: '/pages/auth/login' })
-  if (!commentContent.value.trim()) return
-
-  submitting.value = true
-  try {
-    const isReply = !!replyTarget.value
-    const data: any = {
-      video_id: videoId.value,
-      content: commentContent.value.trim()
-    }
-    if (isReply) {
-      data.parent_id = replyTarget.value.id
-    }
-
-    const res = await request({
-      url: '/api/interactions/comments/',
-      method: 'POST',
-      data
-    })
-    
-    uni.showToast({ title: isReply ? '回复成功' : '评论成功', icon: 'success' })
-    commentContent.value = ''
-    showCommentInput.value = false
-    
-    if (isReply) {
-      if (!replyRoot.value._replies) replyRoot.value._replies = []
-      replyRoot.value._replies.unshift(res)
-      replyRoot.value.replies_count = (replyRoot.value.replies_count || 0) + 1
-      replyRoot.value._showReplies = true
+    if (!res.next && !res.has_next) {
+      videoFinished.value = true
     } else {
-      commentList.value.unshift({
-        ...res,
-        _showReplies: false,
-        _replies: [],
-        _repliesPage: 1,
-        _repliesHasNext: false
-      })
-      if (videoDetail.value) {
-        videoDetail.value.comment_count++
-      }
+      videoPage.value += 1
     }
-    
-    replyTarget.value = null
-    replyRoot.value = null
   } catch (err) {
-    console.error('Submit comment error:', err)
+    console.error('Fetch user videos error:', err)
+    if (refresh || !videoList.value.length) {
+      uni.showToast({ title: '视频列表加载失败', icon: 'none' })
+    }
   } finally {
-    submitting.value = false
+    videoLoading.value = false
   }
-}
-
-const handleLikeComment = async (comment: any) => {
-  if (!userStore.isLoggedIn) return uni.navigateTo({ url: '/pages/auth/login' })
-  try {
-    const res = await request({
-      url: `/api/interactions/comments/${comment.id}/like/`,
-      method: 'POST'
-    })
-    comment.is_liked = !!res.liked
-    comment.like_count = res.count
-    uni.vibrateShort({})
-  } catch (err) {}
-}
-
-const handleSortComments = (sort: string) => {
-  if (commentSort.value === sort) return
-  commentSort.value = sort
-  fetchComments(true)
-}
-
-const canDeleteComment = (comment: any) => {
-  if (!userStore.isLoggedIn || !userStore.userInfo) return false
-  const currentUserId = String(userStore.userInfo.id)
-  // 是评论者本人 或 是视频作者本人
-  return String(comment.user?.id || '') === currentUserId || isOwner.value
-}
-
-const handleDeleteComment = (comment: any, parent?: any) => {
-  uni.showModal({
-    title: '提示',
-    content: '确定要删除这条评论吗？',
-    success: async (res) => {
-      if (res.confirm) {
-        try {
-          await request({
-            url: `/api/interactions/comments/${comment.id}/`,
-            method: 'DELETE'
-          })
-          uni.showToast({ title: '已删除', icon: 'none' })
-          
-          if (parent) {
-            // 删除的是二级评论
-            const idx = parent._replies?.findIndex((r: any) => r.id === comment.id)
-            if (idx !== -1) {
-              parent._replies.splice(idx, 1)
-              parent.replies_count = Math.max(0, (parent.replies_count || 1) - 1)
-            }
-          } else {
-            // 删除的是一级评论
-            const idx = commentList.value.findIndex((c: any) => c.id === comment.id)
-            if (idx !== -1) {
-              commentList.value.splice(idx, 1)
-              if (videoDetail.value) {
-                videoDetail.value.comment_count = Math.max(0, (videoDetail.value.comment_count || 1) - 1)
-              }
-            }
-          }
-        } catch (err) {
-          console.error('Delete comment error:', err)
-        }
-      }
-    }
-  })
-}
-
-const onScrollToLower = () => {
-  fetchComments()
-}
-
-const handleLike = async () => {
-  if (!userStore.isLoggedIn) return uni.navigateTo({ url: '/pages/auth/login' })
-  try {
-    const res = await request({
-      url: '/api/interactions/like/toggle/',
-      method: 'POST',
-      data: { video_id: videoId.value }
-    })
-    if (videoDetail.value) {
-      videoDetail.value.liked = !!res.liked
-      if (typeof res.like_count === 'number') {
-        videoDetail.value.like_count = res.like_count
-      }
-    }
-    uni.vibrateShort({})
-  } catch (err) {}
-}
-
-const handleCollect = async () => {
-  if (!userStore.isLoggedIn) return uni.navigateTo({ url: '/pages/auth/login' })
-  try {
-    const res = await request({
-      url: '/api/interactions/favorite/toggle/',
-      method: 'POST',
-      data: { video_id: videoId.value }
-    })
-    if (videoDetail.value) {
-      videoDetail.value.favorited = !!res.favorited
-      if (typeof res.favorite_count === 'number') {
-        videoDetail.value.collect_count = res.favorite_count
-      }
-    }
-    uni.vibrateShort({})
-  } catch (err) {}
-}
-
-const handleShare = () => {
-  showSharePopup.value = true
-}
-
-const handleCopyLink = () => {
-  let shareUrl = ''
-  // #ifdef H5
-  shareUrl = window.location.href
-  // #endif
-  // #ifndef H5
-  const baseUrl = getBaseUrl().replace(/\/$/, '')
-  shareUrl = `${baseUrl}/#/pages/video/detail?id=${videoId.value}`
-  // #endif
-
-  uni.setClipboardData({
-    data: shareUrl,
-    success: () => {
-      uni.showToast({ title: '链接已复制', icon: 'success' })
-      showSharePopup.value = false
-    }
-  })
-}
-
-const handleToggleWatchLater = async () => {
-  if (!userStore.isLoggedIn) return uni.navigateTo({ url: '/pages/auth/login' })
-  try {
-    const res = await request({
-      url: '/api/interactions/watch-later/toggle/',
-      method: 'POST',
-      data: { video_id: videoId.value }
-    })
-    if (videoDetail.value) {
-      // 这里的 res.saved 来自后端 API 返回值
-      videoDetail.value.watch_later = !!res.saved
-    }
-    uni.showToast({
-      title: res.saved ? '已加入稍后看' : '已移除稍后看',
-      icon: 'none'
-    })
-    uni.vibrateShort({})
-  } catch (err) {}
 }
 
 const handleFollow = async () => {
-  if (!userStore.isLoggedIn) return uni.navigateTo({ url: '/pages/auth/login' })
-  const uid = authorId.value
-  if (!uid || isOwner.value) return
-  
+  if (followLoading.value) return
+  if (!userStore.isLoggedIn) {
+    uni.navigateTo({ url: '/pages/auth/login' })
+    return
+  }
+  if (!userId.value || isMe.value) return
+
+  followLoading.value = true
   try {
     const method = isFollowing.value ? 'unfollow' : 'follow'
     const res = await request({
       url: `/api/interactions/${method}/`,
       method: 'POST',
-      data: { user_id: uid }
+      data: { user_id: userId.value },
     })
-    
+
     isFollowing.value = !!res.following
-    
-    if (authorDetail.value) {
-      const prev = Number(authorDetail.value.followers_count || 0)
-      const next = isFollowing.value ? (prev + 1) : Math.max(0, prev - 1)
-      authorDetail.value.followers_count = next
+    isMutual.value = isFollowing.value && followedBy.value
+
+    if (userDetail.value) {
+      const prev = Number(userDetail.value.followers_count || 0)
+      const next = isFollowing.value ? prev + 1 : Math.max(0, prev - 1)
+      userDetail.value.followers_count = next
+      userDetail.value.is_following = isFollowing.value
+      userDetail.value.following = isFollowing.value
     }
-    
+
     uni.showToast({
       title: isFollowing.value ? '已关注' : '已取消关注',
-      icon: 'none'
+      icon: 'none',
     })
-  } catch (err) {
-    console.error('Follow error:', err)
+  } catch (e) {
+    console.error('Follow error:', e)
+    uni.showToast({ title: '操作失败，请稍后重试', icon: 'none' })
+  } finally {
+    followLoading.value = false
   }
 }
 
-const goToUser = (id: string) => {
-  const uid = String(id || '')
-  if (!uid) return
-  uni.navigateTo({ url: `/pages/user/detail?id=${encodeURIComponent(uid)}` })
+const goToDetail = (id: string) => {
+  uni.navigateTo({
+    url: `/pages/video/detail?id=${id}`,
+  })
 }
 
-const onVideoError = (e: any) => {
-  try {
-    const elFromEvent: any = e?.currentTarget || e?.target
-    const domEl: any = (typeof document !== 'undefined') ? document.getElementById('myVideo') : null
-    const el: any = domEl || elFromEvent
-    const mediaErr = el?.error
-
-    let canPlay: any = null
-    try {
-      if (el?.canPlayType) {
-        canPlay = {
-          mp4: el.canPlayType('video/mp4'),
-          m3u8_1: el.canPlayType('application/vnd.apple.mpegurl'),
-          m3u8_2: el.canPlayType('application/x-mpegURL'),
-        }
-      }
-    } catch { }
-
-    console.error('Video error:', {
-      src: currentSrc.value,
-      elementSrc: el?.src,
-      elementCurrentSrc: el?.currentSrc,
-      networkState: el?.networkState,
-      readyState: el?.readyState,
-      canPlay,
-      error: mediaErr ? { code: mediaErr.code, message: mediaErr.message } : null,
-      event: e,
-    })
-  } catch {
-    console.error('Video error:', e)
+const goToFollowing = () => {
+  if (!userId.value) return
+  const deniedMessage = getFollowListDeniedMessage()
+  if (deniedMessage) {
+    uni.showToast({ title: deniedMessage, icon: 'none' })
+    return
   }
-  uni.showToast({ title: '播放失败', icon: 'none' })
+  uni.navigateTo({ url: `/pages/user/following?id=${userId.value}` })
+}
+
+const goToFollowers = () => {
+  if (!userId.value) return
+  const deniedMessage = getFollowListDeniedMessage()
+  if (deniedMessage) {
+    uni.showToast({ title: deniedMessage, icon: 'none' })
+    return
+  }
+  uni.navigateTo({ url: `/pages/user/followers?id=${userId.value}` })
 }
 
 const formatDate = (dateStr: string) => {
   if (!dateStr) return ''
   const date = new Date(dateStr)
-  return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
 const formatCount = (count: number) => {
-  if (count < 1000) return count
-  if (count < 10000) return (count / 1000).toFixed(1) + 'k'
-  return (count / 10000).toFixed(1) + 'w'
+  const n = Number(count || 0)
+  if (n < 1000) return String(n)
+  if (n < 10000) return `${(n / 1000).toFixed(1)}k`
+  return `${(n / 10000).toFixed(1)}w`
 }
 
 onLoad((options: any) => {
   uni.$on('menu:theme-change', onThemeChange)
-  if (options.id) {
-    videoId.value = options.id
-    fetchVideoDetail()
+  userId.value = String(options?.id || '')
+  fetchUserDetail()
+})
+
+onShow(() => {
+  if (!userId.value) return
+  if (!userDetail.value && !loading.value) {
+    fetchUserDetail()
+    return
+  }
+  if (userDetail.value && !loading.value && !followLoading.value) {
+    fetchUserDetail()
   }
 })
+
+onPullDownRefresh(() => {
+  fetchUserDetail()
+})
+
 </script>
 
 <style scoped>
-.detail-container {
+.user-detail-container {
   height: 100vh;
-  display: flex;
-  flex-direction: column;
-  background-color: var(--card-bg);
+  background-color: var(--bg-color);
   color: var(--text-color);
+  padding-top: var(--status-bar-height);
+  width: 100%;
+  overflow: hidden;
 }
 
-.video-section {
-  width: 100%;
-  aspect-ratio: 16/9;
-  background-color: #000;
-  position: relative;
-}
-
-.video-player {
-  width: 100%;
+.page-scroll {
   height: 100%;
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
-.player-custom-controls {
-  position: absolute;
-  top: 20rpx;
-  right: 20rpx;
-  z-index: 10;
-  display: flex;
-  flex-direction: column;
-  gap: 16rpx;
-}
-
-.ctrl-row {
-  display: flex;
-  gap: 12rpx;
-}
-
-.ctrl-btn {
-  background-color: rgba(0, 0, 0, 0.5);
-  border-radius: 8rpx;
-  padding: 6rpx 16rpx;
-  border: 1rpx solid rgba(255, 255, 255, 0.3);
-}
-
-.ctrl-btn text {
-  color: #fff;
-  font-size: 22rpx;
-  font-weight: 500;
-}
-
-.content-scroll {
-  flex: 1;
-  overflow: hidden;
-}
-
-.main-info {
-  padding: 22rpx 24rpx 40rpx;
-}
-
-.title {
-  font-size: 32rpx;
-  font-weight: 700;
-  color: var(--text-color);
-  line-height: 1.4;
-  display: block;
-}
-
-.sub-row {
-  margin-top: 10rpx;
+.header {
   display: flex;
   align-items: center;
+  gap: 32rpx;
+  padding: 52rpx 32rpx 28rpx;
+  background-color: var(--card-bg);
+  min-width: 0;
 }
 
-.sub-text {
-  font-size: 22rpx;
-  color: var(--text-muted);
-}
-
-.sub-dot {
-  margin: 0 10rpx;
-  font-size: 22rpx;
-  color: var(--border-color);
-}
-
-.up-row {
-  margin-top: 22rpx;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.up-left {
-  display: flex;
-  align-items: center;
-  overflow: hidden;
-}
-
-.up-avatar {
-  width: 72rpx;
-  height: 72rpx;
+.avatar {
+  width: 140rpx;
+  height: 140rpx;
   border-radius: 50%;
+  border: 4rpx solid var(--border-color);
   background-color: var(--bg-color);
   flex-shrink: 0;
 }
 
-.up-meta {
-  margin-left: 16rpx;
+.meta {
+  flex: 1;
   overflow: hidden;
 }
 
-.up-name {
-  font-size: 26rpx;
+.nickname {
+  font-size: 40rpx;
   font-weight: 700;
   color: var(--text-color);
   display: block;
-  max-width: 380rpx;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.up-fans {
-  font-size: 22rpx;
+.username {
+  font-size: 24rpx;
   color: var(--text-muted);
-  margin-top: 4rpx;
+  margin-top: 10rpx;
   display: block;
 }
 
-.follow-btn {
-  min-width: 140rpx;
-  height: 60rpx;
+.stats {
   display: flex;
+  gap: 20rpx;
+  padding: 0 32rpx 36rpx;
+  background-color: var(--card-bg);
+  width: 100%;
+  overflow-x: hidden;
+}
+
+.stat-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 0 20rpx;
-  border-radius: 12rpx;
-  background-color: var(--accent-color);
+  gap: 10rpx;
+  min-height: 116rpx;
+  padding: 18rpx 12rpx;
+  min-width: 0;
 }
 
-.follow-text {
-  font-size: 24rpx;
-  color: #fff;
+.stat-item.locked {
+  opacity: 0.6;
+}
+
+.count {
+  font-size: 34rpx;
   font-weight: 700;
-}
-
-.follow-btn.followed {
-  background-color: var(--bg-color);
-}
-
-.follow-btn.followed .follow-text {
-  color: var(--text-muted);
-}
-
-.desc-card {
-  margin-top: 20rpx;
-  background-color: var(--bg-color);
-  border-radius: 12rpx;
-  padding: 18rpx 20rpx;
-  position: relative;
-}
-
-.desc-card:not(.expanded) .desc-text {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
-  overflow: hidden;
-}
-
-.desc-text {
-  font-size: 24rpx;
   color: var(--text-color);
-  line-height: 1.6;
+  line-height: 1;
 }
 
-.tag-row {
-  margin-top: 24rpx;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16rpx;
-}
-
-.tag-item {
-  background-color: var(--bg-color);
-  padding: 6rpx 20rpx;
-  border-radius: 30rpx;
-}
-
-.tag-item text {
+.label {
   font-size: 24rpx;
-  color: var(--accent-color);
-}
-
-.expand-toggle {
-  display: flex;
-  align-items: center;
-  gap: 4rpx;
-  margin-top: 10rpx;
-}
-
-.toggle-text {
-  font-size: 22rpx;
   color: var(--text-muted);
+  line-height: 1.2;
 }
 
-.bottom-bar {
-  height: 100rpx;
-  display: flex;
-  border-top: 1rpx solid var(--border-color);
-  padding-bottom: constant(safe-area-inset-bottom);
-  padding-bottom: env(safe-area-inset-bottom);
+.video-section {
+  margin-top: 12rpx;
   background-color: var(--card-bg);
 }
 
-.action-item {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  transition: all 0.2s;
-}
-
-.action-item:active {
-  transform: scale(0.9);
-  opacity: 0.7;
-}
-
-.action-item.active {
-  color: var(--accent-color);
-}
-
-.action-item.active .action-text {
-  color: var(--accent-color);
-  font-weight: 700;
-}
-
-.share-title {
-  text-align: center;
-  font-size: 28rpx;
-  font-weight: 700;
-  color: var(--text-color);
-  margin-bottom: 40rpx;
-}
-
-.share-grid {
-  display: flex;
-  padding: 0 20rpx;
-  padding-bottom: 20px;
-  gap: 40rpx;
-}
-
-.share-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16rpx;
-}
-
-.icon-wrap {
-  width: 96rpx;
-  height: 96rpx;
-  background-color: var(--bg-color);
-  border-radius: 20rpx;
+.section-tabs {
   display: flex;
   align-items: center;
-  justify-content: center;
-  color: var(--text-color);
-}
-
-.icon-wrap.active {
-  background-color: rgba(25, 137, 250, 0.1);
-  color: var(--accent-color);
-}
-
-.icon-wrap.gray {
-  background-color: var(--bg-color);
-  color: var(--text-color);
-}
-
-.share-text {
-  font-size: 22rpx;
-  color: var(--text-muted);
-}
-
-.comment-section {
-  margin-top: 40rpx;
-  padding: 0 24rpx 140rpx;
-  border-top: 1rpx solid var(--border-color);
-}
-
-.comment-header {
-  padding: 30rpx 0;
-}
-
-.comment-title-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.comment-title {
-  font-size: 28rpx;
-  font-weight: 700;
-  color: var(--text-color);
-}
-
-.sort-tabs {
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-  font-size: 22rpx;
-  color: var(--text-muted);
-}
-
-.sort-tabs .active {
-  color: var(--text-color);
-  font-weight: 700;
-}
-
-.sort-divider {
-  font-size: 18rpx;
-  color: var(--border-color);
-}
-
-.comment-input-area {
-  display: flex;
-  align-items: center;
-  gap: 20rpx;
-  margin-bottom: 40rpx;
-}
-
-.user-avatar {
-  width: 60rpx;
-  height: 60rpx;
-  border-radius: 50%;
-  background-color: var(--bg-color);
-}
-
-.input-box {
-  flex: 1;
-  height: 64rpx;
-  background-color: var(--bg-color);
-  border-radius: 32rpx;
-  display: flex;
-  align-items: center;
-  padding: 0 24rpx;
-}
-
-.placeholder {
-  font-size: 24rpx;
-  color: var(--text-muted);
-}
-
-.comment-list {
-  padding-bottom: 40rpx;
-}
-
-.comment-item {
-  display: flex;
-  gap: 20rpx;
-  margin-bottom: 40rpx;
-}
-
-.comment-avatar {
-  width: 72rpx;
-  height: 72rpx;
-  border-radius: 50%;
-  background-color: var(--bg-color);
-  flex-shrink: 0;
-}
-
-.comment-main {
-  flex: 1;
+  padding: 0 32rpx;
+  height: 88rpx;
   border-bottom: 1rpx solid var(--border-color);
-  padding-bottom: 30rpx;
 }
 
-.user-name {
-  font-size: 24rpx;
-  font-weight: 600;
-  color: var(--text-muted);
-}
-
-.comment-content {
+.tab-item {
   font-size: 28rpx;
   color: var(--text-color);
-  line-height: 1.5;
-  display: block;
-  margin-bottom: 16rpx;
-}
-
-.comment-footer {
+  font-weight: 700;
+  position: relative;
+  height: 100%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
 }
 
-.comment-date {
+.tab-item.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 4rpx;
+  background-color: var(--accent-color);
+  border-radius: 2rpx;
+}
+
+.tab-count {
   font-size: 22rpx;
   color: var(--text-muted);
+  margin-left: 8rpx;
 }
 
-.comment-actions {
+.video-grid {
   display: flex;
-  align-items: center;
-  gap: 30rpx;
+  flex-wrap: wrap;
+  padding: 16rpx;
 }
 
-.action-btn {
+.video-card {
+  width: 50%;
+  padding: 12rpx;
+  box-sizing: border-box;
+}
+
+.cover-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16/10;
+  background-color: var(--bg-color);
+  border-radius: 12rpx;
+  overflow: hidden;
+}
+
+.cover {
+  width: 100%;
+  height: 100%;
+}
+
+.play-count {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  padding: 40rpx 12rpx 8rpx;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.45) 0%, rgba(0, 0, 0, 0) 100%);
   display: flex;
   align-items: center;
   gap: 6rpx;
 }
 
-.action-num {
+.count-text {
   font-size: 22rpx;
-  color: var(--text-muted);
+  color: #fff;
 }
 
-.reply-btn, .delete-btn {
-  font-size: 22rpx;
-  color: var(--text-muted);
+.video-info {
+  padding: 12rpx 4rpx 8rpx;
 }
 
-.delete-btn {
-  margin-left: 20rpx;
-}
-
-.list-status {
-  padding: 30rpx 0;
-  text-align: center;
-}
-
-.empty-comments {
-  padding: 50rpx 0 20rpx;
-  text-align: center;
-}
-
-.empty-text {
-  font-size: 24rpx;
-  color: var(--text-muted);
-}
-
-.no-more {
-  font-size: 24rpx;
-  color: var(--text-muted);
-}
-
-.popup-input-wrap {
-  padding: 30rpx;
-  background-color: var(--card-bg);
-}
-
-.comment-field {
-  background-color: var(--bg-color);
-  border-radius: 12rpx;
-  margin-bottom: 20rpx;
-  padding: 20rpx !important;
-}
-
-:deep(.comment-field .van-field__control) {
-  color: var(--text-color);
-}
-
-.popup-footer {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.action-text {
-  font-size: 24rpx;
-  color: var(--text-color);
-  margin-top: 8rpx;
-}
-
-.loading-state {
-  height: 100vh;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background-color: var(--bg-color);
-}
-
-.replies-container {
-  margin-top: 20rpx;
-  background-color: var(--bg-color);
-  border-radius: 12rpx;
-  padding: 0 20rpx;
-}
-
-.expand-replies, .collapse-replies {
-  padding: 20rpx 0;
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-}
-
-.expand-text {
-  font-size: 24rpx;
-  color: var(--accent-color);
-  font-weight: 600;
-}
-
-.replies-list {
-  padding-top: 10rpx;
-}
-
-.reply-item {
-  display: flex;
-  gap: 16rpx;
-  padding: 20rpx 0;
-}
-
-.reply-avatar {
-  width: 48rpx;
-  height: 48rpx;
-  border-radius: 50%;
-  background-color: var(--bg-color);
-}
-
-.reply-main {
-  flex: 1;
-}
-
-/* 适配 Vant Popup 深色模式已在 App.vue 全局实现 */
-
-.reply-user {
-  margin-bottom: 8rpx;
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-}
-
-.reply-to {
-  font-size: 22rpx;
-  color: var(--text-muted);
-}
-
-.reply-to-name {
-  color: #1989fa;
-}
-
-.reply-content {
+.video-title {
   font-size: 26rpx;
   color: var(--text-color);
-  line-height: 1.5;
-  display: block;
-  margin-bottom: 12rpx;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  height: 72rpx;
+  margin-bottom: 8rpx;
 }
 
-.more-replies {
-  padding: 20rpx 0;
-  text-align: center;
-}
-
-.more-text {
-  font-size: 22rpx;
+.video-date {
+  font-size: 20rpx;
   color: var(--text-muted);
+}
+
+.empty-state {
+  padding: 120rpx 0;
+}
+
+.loading-more {
+  padding: 40rpx 0;
+  display: flex;
+  justify-content: center;
+}
+
+.loading {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--bg-color);
 }
 </style>

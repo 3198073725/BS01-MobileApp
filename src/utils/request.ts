@@ -1,13 +1,31 @@
 import { useUserStore } from '@/store/user'
+import { redirectToLoginOnce } from '@/utils/auth'
 
-const resolveBaseUrl = (): string => {
-  // 允许通过本地存储覆盖，便于测试/灰度
+const H5_FALLBACK_API_BASE = 'http://127.0.0.1:8000'
+
+const readBuildApiBase = (): string => {
+  try {
+    const value = (import.meta as any)?.env?.VITE_APP_API_BASE
+    if (value && typeof value === 'string' && /^https?:\/\//i.test(value)) {
+      return value.replace(/\/$/, '')
+    }
+  } catch { }
+  return ''
+}
+
+const readStoredApiBase = (): string => {
   try {
     const override = uni.getStorageSync('api_base')
     if (override && typeof override === 'string' && /^https?:\/\//i.test(override)) {
       return override.replace(/\/$/, '')
     }
   } catch { }
+  return ''
+}
+
+const resolveDefaultBaseUrl = (): string => {
+  const buildApiBase = readBuildApiBase()
+  if (buildApiBase) return buildApiBase
 
   // #ifdef H5
   try {
@@ -24,17 +42,16 @@ const resolveBaseUrl = (): string => {
     }
     const apiHost = host.replace(/^(admin|web|mobile)\./, 'api.')
     const port = (typeof window !== 'undefined' ? (window.location?.port || '') : '')
-    const isDefaultPort = !port || port === '80'
+    const isDefaultPort = !port || port === '80' || port === '443'
     const apiPort = isDefaultPort ? '' : ':8000'
     return `${proto}//${apiHost}${apiPort}`
   } catch {
-    return 'http://127.0.0.1:8000'
+    return H5_FALLBACK_API_BASE
   }
   // #endif
 
   // #ifndef H5
-  // 小程序/APP 侧默认走 api 虚拟域名（按你的 hosts/网关策略调整）
-  // 优先从 manifest.json 或环境变量读取，避免硬编码
+  // 小程序/APP 侧其次从运行时 manifest 注入 API_BASE
   try {
     const manifest = uni.getAppBaseInfo?.() || uni.getAccountInfoSync?.() || {}
     const envApiBase = (manifest as any)?.env?.API_BASE || (manifest as any)?.mpConfig?.API_BASE
@@ -42,12 +59,16 @@ const resolveBaseUrl = (): string => {
       return envApiBase.replace(/\/$/, '')
     }
   } catch { }
-  // 兜底使用本地域名，实际部署时请通过小程序后台/构建脚本注入环境变量
-  return 'http://api.bs01.local:8000'
+  return ''
   // #endif
 }
 
+const resolveBaseUrl = (): string => readStoredApiBase() || resolveDefaultBaseUrl()
+
+export const getDefaultBaseUrl = (): string => resolveDefaultBaseUrl()
 export const getBaseUrl = (): string => resolveBaseUrl()
+
+const getMissingApiBaseMessage = (): string => '当前环境未注入 API 地址，请到【设置-API地址】填写可访问的域名或 IP'
 
 export interface RequestConfig extends Omit<UniApp.RequestOptions, 'method'> {
   noAuth?: boolean;
@@ -62,6 +83,7 @@ export interface ApiResponse<T = any> {
 }
 
 let shownApiBaseHint = false
+let shownMissingApiBaseHint = false
 
 const extractErrorMessage = (resData: any): string => {
   if (!resData) return '请求错误，请稍后再试';
@@ -93,7 +115,6 @@ const extractErrorMessage = (resData: any): string => {
   return '请求错误，请稍后再试';
 }
 
-let authRedirecting = false
 let isRefreshing = false
 let refreshSubscribers: ((token: string) => void)[] = []
 
@@ -117,13 +138,17 @@ const doRefreshToken = async (): Promise<string | null> => {
 
   isRefreshing = true
   try {
+    const baseUrl = getBaseUrl()
+    if (!baseUrl) {
+      throw new Error('missing api base')
+    }
     const refreshToken = uni.getStorageSync('refreshToken')
     if (!refreshToken) {
       throw new Error('no refresh token')
     }
 
     const res: any = await uni.request({
-      url: `${getBaseUrl()}/api/token/refresh/`,
+      url: `${baseUrl}/api/token/refresh/`,
       method: 'POST',
       data: { refresh: refreshToken },
       header: { 'Content-Type': 'application/json' }
@@ -148,24 +173,21 @@ const doRefreshToken = async (): Promise<string | null> => {
   }
 }
 
-const redirectToLoginOnce = () => {
-  if (authRedirecting) return
-  authRedirecting = true
-  try {
-    const pages = getCurrentPages?.() as any[]
-    const currentRoute = pages?.[pages.length - 1]?.route || ''
-    if (currentRoute === 'pages/auth/login') return
-  } catch { }
-
-  uni.reLaunch({ url: '/pages/auth/login' })
-  setTimeout(() => {
-    authRedirecting = false
-  }, 800)
-}
-
 const request = <T = any>(config: RequestConfig): Promise<T> => {
   const token = uni.getStorageSync('token');
   const baseUrl = getBaseUrl()
+
+  if (!baseUrl) {
+    const message = getMissingApiBaseMessage()
+    if (!config.silent && !shownMissingApiBaseHint) {
+      shownMissingApiBaseHint = true
+      uni.showToast({ title: message, icon: 'none', duration: 3000 })
+      setTimeout(() => {
+        shownMissingApiBaseHint = false
+      }, 1200)
+    }
+    return Promise.reject({ statusCode: 0, message, data: null })
+  }
 
   const header: any = {
     ...config.header,
@@ -196,14 +218,18 @@ const request = <T = any>(config: RequestConfig): Promise<T> => {
           uni.showToast({ title: errorMsg, icon: 'none' });
         }
       } else {
-        try {
-          const userStore = useUserStore()
-          userStore.logout()
-        } catch {
-          uni.removeStorageSync('token');
-          uni.removeStorageSync('userInfo');
+        if (res.statusCode === 401) {
+          try {
+            const userStore = useUserStore()
+            userStore.logout()
+          } catch {
+            uni.removeStorageSync('token');
+            uni.removeStorageSync('userInfo');
+          }
+          redirectToLoginOnce()
+        } else if (!config.silent) {
+          uni.showToast({ title: errorMsg, icon: 'none' });
         }
-        redirectToLoginOnce()
       }
     } else {
       if (!config.silent) {

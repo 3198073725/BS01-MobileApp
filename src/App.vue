@@ -100,8 +100,26 @@ const initAuthState = async () => {
   }
 }
 
+const restoreDefaultH5ScrollLock = () => {
+  // #ifdef H5
+  try {
+    const hash = window.location.hash || ''
+    const allowDocumentScroll =
+      hash.startsWith('#/pages/legal/terms') ||
+      hash.startsWith('#/pages/legal/privacy') ||
+      hash.startsWith('#/pages/legal/license')
+
+    if (!allowDocumentScroll) {
+      document.documentElement.removeAttribute('data-scroll-enabled')
+      document.body.removeAttribute('data-scroll-enabled')
+    }
+  } catch (e) {}
+  // #endif
+}
+
 onLaunch(() => {
   console.log("App Launch");
+  restoreDefaultH5ScrollLock();
   
   // 初始化全局配置并开启定时轮询
   const configStore = useConfigStore();
@@ -137,6 +155,7 @@ onLaunch(() => {
 
 onShow(() => {
   console.log("App Show");
+  restoreDefaultH5ScrollLock();
 });
 
 onHide(() => {
@@ -145,6 +164,12 @@ onHide(() => {
 </script>
 
 <style>
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 /* 1. 全局变量定义 - 最高优先级 */
 :root, html, body, page, .page, uni-page-body, .uni-body {
   --bg-color: #f4f5f7 !important;
@@ -177,11 +202,28 @@ html, body, page, .page, .uni-page-body, .uni-body, uni-page-body, .uni-page-wra
   background-color: var(--bg-color) !important;
   color: var(--text-color) !important;
   transition: background-color 0.2s, color 0.2s;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 /* 针对 uni-app H5 特殊容器的暴力覆盖 */
 uni-app, uni-page, .uni-app--showtabbar uni-page-wrapper::after {
   background-color: var(--bg-color) !important;
+}
+
+view,
+scroll-view,
+swiper,
+swiper-item,
+image,
+video {
+  box-sizing: border-box;
+  max-width: 100%;
+}
+
+scroll-view {
+  width: 100%;
 }
 
 /* 4. 原生 UI 组件适配 */
@@ -275,16 +317,31 @@ html[data-theme='dark'] .van-search__content, .dark-mode .van-search__content { 
 
 /* 禁用原生滚动 */
 /* #ifdef H5 */
-html, body {
+html, body, #app, uni-app, uni-page, uni-page-wrapper, uni-page-body {
   width: 100%;
   height: 100%;
+  max-height: 100%;
 }
 
 /* 允许特定页面滚动 */
 html:not([data-scroll-enabled="true"]), 
 body:not([data-scroll-enabled="true"]) {
   position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  overflow: hidden;
   overscroll-behavior: none;
+}
+
+html:not([data-scroll-enabled="true"]) #app,
+html:not([data-scroll-enabled="true"]) uni-app,
+html:not([data-scroll-enabled="true"]) uni-page,
+html:not([data-scroll-enabled="true"]) uni-page-wrapper,
+html:not([data-scroll-enabled="true"]) uni-page-body {
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden !important;
 }
 /* #endif */
 </style>

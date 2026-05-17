@@ -121,6 +121,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
+import { redirectToLoginOnce } from '@/utils/auth'
 import request, { getBaseUrl } from '@/utils/request'
 import { useUserStore } from '@/store/user'
 
@@ -163,12 +164,11 @@ const ensureLoginWithChoice = () => {
 
 const onLoginPopupCancel = () => {
   showLoginPopup.value = false
-  uni.switchTab({ url: '/pages/index/index' })
 }
 
 const onLoginPopupConfirm = () => {
   showLoginPopup.value = false
-  uni.navigateTo({ url: '/pages/auth/login' })
+  redirectToLoginOnce('navigateTo')
 }
 
 const pickVideo = () => {
@@ -280,7 +280,9 @@ const handleTagConfirm = async () => {
       data: { name }
     })
     addTag(res)
-  } catch (err) {}
+  } catch (err) {
+    uni.showToast({ title: '标签创建失败', icon: 'none' })
+  }
 }
 
 const addTag = (tag: any) => {
@@ -358,7 +360,9 @@ onMounted(() => {
 })
 
 onShow(() => {
-  ensureLoginWithChoice()
+  if (userStore.isLoggedIn && !categories.value.length) {
+    fetchCategories()
+  }
 })
 
 onUnmounted(() => {
@@ -442,6 +446,8 @@ onUnmounted(() => {
 .content-scroll {
   flex: 1;
   overflow: hidden;
+  width: 100%;
+  min-width: 0;
 }
 
 .upload-section {
@@ -530,17 +536,22 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16rpx;
   margin-bottom: 20rpx;
+  min-width: 0;
 }
 
 .tag-title {
   font-size: 28rpx;
   color: var(--text-color);
+  flex: 1;
+  min-width: 0;
 }
 
 .tag-count {
   font-size: 24rpx;
   color: var(--text-muted);
+  flex-shrink: 0;
 }
 
 .tag-input-wrap {
@@ -582,6 +593,7 @@ onUnmounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 16rpx;
+  min-width: 0;
 }
 
 .tag-tag {

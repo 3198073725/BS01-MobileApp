@@ -91,6 +91,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useUserStore } from '@/store/user'
 import { useConfigStore } from '@/store/config'
+import { ensureLogin as ensureAuth } from '@/utils/auth'
 import request from '@/utils/request'
 
 const userStore = useUserStore()
@@ -138,11 +139,7 @@ const startTabOptions = [
 const startTabLabel = computed(() => startTabOptions.find(o => o.value === startTab.value)?.label || '推荐')
 
 const ensureLogin = () => {
-  if (!userStore.isLoggedIn) {
-    uni.navigateTo({ url: '/pages/auth/login' })
-    return false
-  }
-  return true
+  return ensureAuth(userStore.isLoggedIn, 'navigateTo')
 }
 
 const goBack = () => {
@@ -163,20 +160,24 @@ const loadSettings = () => {
   }
 }
 
-onMounted(() => {
-  loadSettings()
-})
-
 const goEditProfile = () => {
   if (!ensureLogin()) return
   uni.navigateTo({ url: '/pages/user/edit' })
 }
 
 const goApiSettings = () => {
+  if (!showApiBase.value) {
+    uni.showToast({ title: 'API 地址入口已关闭', icon: 'none' })
+    return
+  }
   uni.navigateTo({ url: '/pages/settings/api' })
 }
 
 const onPrivacyChange = async (e: any) => {
+  if (!ensureLogin()) {
+    loadSettings()
+    return
+  }
   const index = Number(e?.detail?.value ?? e?.target?.value)
   const mode = privacyOptions[index]?.value
   if (!mode) return
@@ -189,7 +190,10 @@ const onPrivacyChange = async (e: any) => {
     privacyMode.value = mode
     userStore.setUserInfo(res)
     uni.showToast({ title: '已更新', icon: 'none' })
-  } catch (err) {}
+  } catch (err) {
+    loadSettings()
+    uni.showToast({ title: '更新失败，请稍后重试', icon: 'none' })
+  }
 }
 
 const onAutoplayChange = (e: any) => {
@@ -271,20 +275,6 @@ const clearResumeData = () => {
   })
 }
 
-const handleLogout = () => {
-  if (!ensureLogin()) return
-  uni.showModal({
-    title: '提示',
-    content: '确定要退出登录吗？',
-    confirmColor: '#fa5151',
-    success: (res) => {
-      if (res.confirm) {
-        userStore.logout()
-        uni.reLaunch({ url: '/pages/auth/login' })
-      }
-    },
-  })
-}
 </script>
 
 <style scoped>
@@ -295,6 +285,7 @@ const handleLogout = () => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  width: 100%;
 }
 
 .nav-bar {
@@ -322,6 +313,9 @@ const handleLogout = () => {
 
 .content {
   flex: 1;
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 .group {
@@ -361,6 +355,7 @@ const handleLogout = () => {
   gap: 8rpx;
   font-size: 28rpx;
   color: var(--text-color);
+  min-width: 0;
 }
 
 .logout-group {

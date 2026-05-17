@@ -145,6 +145,8 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch, onUnmounted } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
+import { consumeLoginIntent, redirectToLoginOnce, setLoginIntent } from '@/utils/auth'
 import { formatImageUrl } from '@/utils/image'
 import request from '@/utils/request'
 import { useUserStore } from '@/store/user'
@@ -156,6 +158,10 @@ const onThemeChange = (t: string) => {
 
 onUnmounted(() => {
   uni.$off('menu:theme-change', onThemeChange)
+  if (unreadTimer) {
+    clearInterval(unreadTimer)
+    unreadTimer = null
+  }
 })
 
 interface Video {
@@ -198,7 +204,28 @@ const feedTab = ref<'recommend' | 'following' | 'featured'>('recommend')
 
 const showLoginPopup = ref(false)
 const loginPopupTabLabel = ref('')
-const loginPopupTargetTab = ref<'recommend' | 'following' | 'featured'>('recommend')
+const loginPopupTargetTab = ref<'recommend' | 'following' | 'featured' | ''>('')
+let unreadTimer: ReturnType<typeof setInterval> | null = null
+
+const getDefaultFeedTab = (): 'recommend' | 'following' | 'featured' => {
+  const defaultTab = uni.getStorageSync('home_default_tab') as any
+  if (defaultTab && ['recommend', 'following', 'featured'].includes(defaultTab)) {
+    if (defaultTab === 'following' && !userStore.isLoggedIn) {
+      return 'recommend'
+    }
+    return defaultTab
+  }
+  return 'recommend'
+}
+
+const applyLoginIntent = (): boolean => {
+  if (!userStore.isLoggedIn) return false
+  const intent = consumeLoginIntent<{ type?: string; tab?: string }>('home_feed')
+  const tab = intent?.tab
+  if (tab !== 'following' && tab !== 'recommend' && tab !== 'featured') return false
+  feedTab.value = tab
+  return true
+}
 
 const onSearchKeywordChange = (v: any) => {
   const next = v === undefined || v === null ? '' : String(v)
@@ -243,6 +270,7 @@ const fetchVideos = async (refresh = false) => {
     }
 
     const res = await request({ url, data, noAuth })
+    const hasNext = typeof res?.has_next === 'boolean' ? res.has_next : !!res?.next
     
     const newVideos = res.results || []
     if (refresh) {
@@ -251,7 +279,7 @@ const fetchVideos = async (refresh = false) => {
       videoList.value = [...videoList.value, ...newVideos]
     }
 
-    if (!res.next) {
+    if (!hasNext) {
       finished.value = true
     } else {
       page.value++
@@ -266,26 +294,30 @@ const fetchVideos = async (refresh = false) => {
   }
 }
 
-const promptLoginForFeed = (tab: 'following' | 'featured') => {
+const promptLoginForFeed = (tab: 'following') => {
   loginPopupTargetTab.value = tab
-  loginPopupTabLabel.value = tab === 'following' ? '关注' : '精选'
+  loginPopupTabLabel.value = tab === 'following' ? '关注' : '推荐'
   showLoginPopup.value = true
 }
 
 const onLoginPopupCancel = () => {
   showLoginPopup.value = false
-  feedTab.value = 'recommend'
+  loginPopupTargetTab.value = ''
 }
 
 const onLoginPopupConfirm = () => {
   showLoginPopup.value = false
-  uni.navigateTo({ url: '/pages/auth/login' })
+  if (loginPopupTargetTab.value) {
+    setLoginIntent({ type: 'home_feed', tab: loginPopupTargetTab.value })
+    loginPopupTargetTab.value = ''
+  }
+  redirectToLoginOnce('navigateTo')
 }
 
 const switchFeed = (tab: 'recommend' | 'following' | 'featured') => {
   if (feedTab.value === tab) return
   
-  if (!userStore.isLoggedIn && (tab === 'following' || tab === 'featured')) {
+  if (!userStore.isLoggedIn && tab === 'following') {
     promptLoginForFeed(tab)
     return
   }
@@ -297,7 +329,6 @@ const switchFeed = (tab: 'recommend' | 'following' | 'featured') => {
 watch(searchKeyword, (newVal) => {
   if (!newVal.trim()) {
     showSearchHistory.value = false
-    fetchVideos(true)
   }
 })
 
@@ -313,21 +344,27 @@ const onSearch = () => {
 }
 
 const onInput = (val: string) => {
-  if (!val.trim()) {
+  if (!val.trim() && searchKeyword.value) {
     onClear()
   }
 }
 
 const onClear = () => {
+  if (!searchKeyword.value && !showSearchHistory.value) return
   searchKeyword.value = ''
   showSearchHistory.value = false
   fetchVideos(true)
 }
 
 const loadSearchHistory = () => {
-  const history = uni.getStorageSync('search_history')
-  if (history) {
-    searchHistory.value = JSON.parse(history)
+  try {
+    const history = uni.getStorageSync('search_history')
+    if (!history) return
+    const parsed = JSON.parse(history)
+    searchHistory.value = Array.isArray(parsed) ? parsed.map((item) => String(item)).filter(Boolean) : []
+  } catch {
+    searchHistory.value = []
+    uni.removeStorageSync('search_history')
   }
 }
 
@@ -405,14 +442,21 @@ const unread = ref(0)
 const fetchUnreadCount = async () => {
   if (!userStore.isLoggedIn) {
     unread.value = 0
+    uni.removeTabBarBadge({ index: 2 })
     return
   }
   try {
-    const res = await request({
-      url: '/api/interactions/notifications/unread-count/',
-      silent: true
-    })
-    unread.value = Number(res?.unread || 0)
+    const [interactionsRes, announcementsRes] = await Promise.all([
+      request({
+        url: '/api/interactions/notifications/unread-count/',
+        silent: true
+      }),
+      request({
+        url: '/api/notifications/announcements/unread-count/',
+        silent: true
+      })
+    ])
+    unread.value = Number(interactionsRes?.unread || 0) + Number(announcementsRes?.unread || 0)
     if (unread.value > 0) {
       uni.setTabBarBadge({
         index: 2, // 消息 Tab 的索引
@@ -423,6 +467,7 @@ const fetchUnreadCount = async () => {
     }
   } catch (err) {
     unread.value = 0
+    uni.removeTabBarBadge({ index: 2 })
   }
 }
 
@@ -430,22 +475,23 @@ onMounted(() => {
   uni.$on('menu:theme-change', onThemeChange)
   loadSearchHistory()
   fetchCategories()
-  
-  // 初始化默认启动 Tab
-  const defaultTab = uni.getStorageSync('home_default_tab') as any
-  if (defaultTab && ['recommend', 'following', 'featured'].includes(defaultTab)) {
-    // 如果是关注页，需要检查登录状态
-    if (defaultTab === 'following' && !userStore.isLoggedIn) {
-      feedTab.value = 'recommend'
-    } else {
-      feedTab.value = defaultTab
-    }
+
+  if (!applyLoginIntent()) {
+    feedTab.value = getDefaultFeedTab()
   }
-  
+
   fetchVideos()
   fetchUnreadCount()
   // 每 30 秒轮询一次未读数
-  setInterval(fetchUnreadCount, 30000)
+  unreadTimer = setInterval(fetchUnreadCount, 30000)
+})
+
+onShow(() => {
+  const restored = applyLoginIntent()
+  if (restored) {
+    fetchVideos(true)
+  }
+  fetchUnreadCount()
 })
 
 const onScrollToLower = () => {
@@ -522,6 +568,7 @@ const onRefresh = () => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  width: 100%;
 }
 
 .top-bar {
@@ -631,6 +678,8 @@ const onRefresh = () => {
 .media-scroll {
   flex: 1;
   overflow: hidden;
+  width: 100%;
+  min-width: 0;
 }
 
 .search-sort-tabs {
@@ -638,6 +687,8 @@ const onRefresh = () => {
   padding: 20rpx 24rpx 10rpx;
   gap: 40rpx;
   background-color: var(--bg-color);
+  width: 100%;
+  overflow-x: auto;
 }
 
 .search-sort-tabs text {
@@ -695,6 +746,7 @@ const onRefresh = () => {
   border-radius: 36rpx;
   overflow: hidden;
   padding: 0 !important;
+  width: 100%;
 }
 
 .video-list {

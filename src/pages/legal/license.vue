@@ -201,6 +201,7 @@ const goBack = () => {
   font-size: 32rpx;
   font-weight: 700;
   color: var(--text-color);
+  min-width: 0;
 }
 
 .title-line {
@@ -217,16 +218,19 @@ const goBack = () => {
   color: var(--text-color);
   opacity: 0.9;
   text-align: justify;
+  word-break: break-word;
 }
 
 .link-card {
   display: flex;
   align-items: center;
+  gap: 20rpx;
   padding: 24rpx;
   background-color: var(--bg-color);
   border-radius: 16rpx;
   margin-top: 16rpx;
   border: 1rpx solid var(--border-color);
+  min-width: 0;
 }
 
 .link-left {
@@ -237,7 +241,7 @@ const goBack = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-right: 20rpx;
+  flex-shrink: 0;
 }
 
 .link-right {
