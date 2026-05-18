@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia';
+import { notifySystemEventsAuthChanged } from '@/utils/systemEvents';
 
 interface UserInfo {
   id: string;
@@ -22,6 +23,7 @@ export const useUserStore = defineStore('user', {
     setToken(token: string) {
       this.token = token;
       uni.setStorageSync('token', token);
+      try { notifySystemEventsAuthChanged() } catch {}
     },
     setUserInfo(userInfo: UserInfo) {
       this.userInfo = userInfo;
@@ -35,6 +37,7 @@ export const useUserStore = defineStore('user', {
       uni.removeStorageSync('userInfo');
       uni.removeStorageSync('login_redirect');
       uni.removeStorageSync('login_intent');
+      try { notifySystemEventsAuthChanged() } catch {}
       try {
         uni.removeTabBarBadge({ index: 2 });
       } catch {}

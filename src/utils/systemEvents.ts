@@ -97,6 +97,17 @@ export const notifySystemEventsForeground = () => {
   connectSystemEvents()
 }
 
+export const notifySystemEventsAuthChanged = () => {
+  reconnectAttempt = 0
+  intentionalClose = true
+  clearReconnectTimer()
+  cleanupSocket()
+  if (started) {
+    intentionalClose = false
+    connectSystemEvents()
+  }
+}
+
 export const notifySystemEventsBackground = () => {
   intentionalClose = true
   clearReconnectTimer()

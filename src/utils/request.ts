@@ -1,5 +1,6 @@
 import { useUserStore } from '@/store/user'
 import { redirectToLoginOnce } from '@/utils/auth'
+import { notifySystemEventsAuthChanged } from '@/utils/systemEvents'
 
 const H5_FALLBACK_API_BASE = 'http://127.0.0.1:8000'
 
@@ -159,6 +160,7 @@ const doRefreshToken = async (): Promise<string | null> => {
       if (res.data.refresh) {
         uni.setStorageSync('refreshToken', res.data.refresh)
       }
+      try { notifySystemEventsAuthChanged() } catch { }
       onTokenRefreshed(res.data.access)
       return res.data.access
     }
@@ -167,6 +169,7 @@ const doRefreshToken = async (): Promise<string | null> => {
     uni.removeStorageSync('token')
     uni.removeStorageSync('refreshToken')
     uni.removeStorageSync('userInfo')
+    try { notifySystemEventsAuthChanged() } catch { }
     return null
   } finally {
     isRefreshing = false

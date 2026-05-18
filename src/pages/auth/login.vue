@@ -72,6 +72,7 @@ import { onLoad } from '@dcloudio/uni-app'
 import request from '@/utils/request'
 import { completeLoginRedirect } from '@/utils/auth'
 import { useUserStore } from '@/store/user'
+import { notifySystemEventsAuthChanged } from '@/utils/systemEvents'
 
 const theme = ref(uni.getStorageSync('theme') || 'light')
 const onThemeChange = (t: string) => {
@@ -198,6 +199,7 @@ const handleLogin = async () => {
       if (res.refresh) {
         uni.setStorageSync('refreshToken', res.refresh)
       }
+      try { notifySystemEventsAuthChanged() } catch {}
       // 获取用户信息
       const userInfo = await request({ url: '/api/users/me/' })
       userStore.setUserInfo(userInfo)
