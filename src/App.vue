@@ -4,7 +4,9 @@ import { onLaunch, onShow, onHide } from "@dcloudio/uni-app";
 import request from "@/utils/request";
 import { useUserStore } from "@/store/user";
 import { useConfigStore } from "@/store/config";
-import { startSystemEvents, notifySystemEventsBackground, notifySystemEventsForeground } from "@/utils/systemEvents";
+import { redirectToLoginOnce } from "@/utils/auth";
+import { extractChangedKeys, getMobileFeedChannel, resolveMobileHotRefresh } from "@/utils/hotConfig";
+import { startSystemEvents, stopSystemEvents, notifySystemEventsBackground, notifySystemEventsForeground } from "@/utils/systemEvents";
 
 const theme = ref(uni.getStorageSync('theme') || 'light');
 
@@ -61,6 +63,63 @@ const parseQuery = (q: string): Record<string, string> => {
     query[decodeURIComponent(k)] = decodeURIComponent(v || '');
   });
   return query;
+}
+
+const getCurrentRoute = (): string => {
+  try {
+    const pages = getCurrentPages?.() as any[]
+    const current = pages?.[pages.length - 1] || null
+    return String(current?.route || '')
+  } catch (e) {
+    return ''
+  }
+}
+
+const MAINTENANCE_ROUTE = 'pages/system/maintenance'
+
+const applyLiveConfigEffects = () => {
+  const userStore = useUserStore();
+  const configStore = useConfigStore();
+  const maintenanceMode = !!configStore.get('maintenance_mode', false);
+  const allowAnonymousView = !!configStore.get('allow_anonymous_view', true);
+  const showApiBase = !!configStore.get('show_api_base', true);
+  const route = getCurrentRoute();
+
+  if (maintenanceMode) {
+    if (route !== MAINTENANCE_ROUTE) {
+      uni.reLaunch({ url: `/${MAINTENANCE_ROUTE}` });
+    }
+    return;
+  }
+
+  if (route === MAINTENANCE_ROUTE) {
+    uni.reLaunch({ url: '/pages/index/index' });
+    return;
+  }
+
+  if (!showApiBase && route === 'pages/settings/api') {
+    uni.showToast({ title: 'API 地址入口已关闭', icon: 'none' });
+    setTimeout(() => {
+      uni.reLaunch({ url: '/pages/settings/index' });
+    }, 120);
+    return;
+  }
+
+  if (!allowAnonymousView && !userStore.token && route !== 'pages/auth/login') {
+    uni.showToast({ title: '当前站点已关闭游客访问', icon: 'none' });
+    redirectToLoginOnce('reLaunch');
+  }
+}
+
+const dispatchMobileHotRefresh = (payload: any) => {
+  const route = getCurrentRoute()
+  const channel = getMobileFeedChannel(route)
+  if (!channel) return
+  const refresh = resolveMobileHotRefresh(route, extractChangedKeys(payload))
+  if (!refresh) return
+  try {
+    uni.$emit('app:refresh-current-feed', refresh)
+  } catch {}
 }
 
 const handleH5ResetPasswordDeepLink = () => {
@@ -125,15 +184,40 @@ onLaunch(() => {
   // 初始化全局配置并接入系统事件推送
   const configStore = useConfigStore();
   configStore.fetchConfigs().finally(() => {
-    startSystemEvents({
-      onConfigUpdated: () => {
-        configStore.fetchConfigs();
-      }
-    });
+    const userStore = useUserStore();
+    const allowAnonymousView = !!configStore.get('allow_anonymous_view', true);
+    if (!userStore.token && !allowAnonymousView) {
+      stopSystemEvents();
+    } else {
+      startSystemEvents({
+        onConfigUpdated: (payload) => {
+          if (payload?.reload_required) {
+            const route = getCurrentRoute();
+            if (route) {
+              uni.reLaunch({ url: `/${route}` });
+            }
+            return;
+          }
+          configStore.fetchConfigs().finally(() => {
+            applyLiveConfigEffects();
+            dispatchMobileHotRefresh(payload);
+          });
+        }
+      });
+    }
+    applyLiveConfigEffects();
   });
 
   handleH5ResetPasswordDeepLink();
-  initAuthState();
+  initAuthState().finally(() => {
+    const userStore = useUserStore();
+    const configStore = useConfigStore();
+    const allowAnonymousView = !!configStore.get('allow_anonymous_view', true);
+    if (!userStore.token && !allowAnonymousView) {
+      stopSystemEvents();
+    }
+    applyLiveConfigEffects();
+  });
   try {
     const info = uni.getSystemInfoSync() as any;
     const sbh = Number(info?.statusBarHeight || 0);
@@ -161,6 +245,10 @@ onShow(() => {
   console.log("App Show");
   restoreDefaultH5ScrollLock();
   notifySystemEventsForeground();
+  const configStore = useConfigStore();
+  configStore.fetchConfigs().finally(() => {
+    applyLiveConfigEffects();
+  });
 });
 
 onHide(() => {

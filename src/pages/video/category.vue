@@ -103,16 +103,18 @@ const fetchVideos = async (refresh = false) => {
   }
 }
 
+const refreshFeed = () => {
+  refreshing.value = true
+  return fetchVideos(true)
+}
+
 const changeOrder = (newOrder: string) => {
   if (order.value === newOrder) return
   order.value = newOrder
-  fetchVideos(true)
+  refreshFeed()
 }
 
-const onRefresh = () => {
-  refreshing.value = true
-  fetchVideos(true)
-}
+const onRefresh = () => { refreshFeed() }
 
 const onLoadMore = () => fetchVideos()
 
@@ -133,7 +135,7 @@ onLoad((options: any) => {
   if (options.id) {
     categoryId.value = options.id
     categoryName.value = options.name || '分类详情'
-    fetchVideos(true)
+    refreshFeed()
   }
 })
 </script>

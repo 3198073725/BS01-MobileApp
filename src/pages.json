@@ -127,6 +127,12 @@
       }
     },
     {
+      "path": "pages/system/maintenance",
+      "style": {
+        "navigationBarTitleText": "系统维护中"
+      }
+    },
+    {
       "path": "pages/legal/terms",
       "style": {
         "navigationBarTitleText": "用户协议",

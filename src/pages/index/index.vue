@@ -89,7 +89,7 @@
       </view>
 
       <!-- 视频列表 - 优化间距与对比度 -->
-      <view class="video-list">
+      <view class="video-list" :class="[`layout-${homeLayout}`]">
         <view
           v-for="video in videoList"
           :key="video.id"
@@ -144,12 +144,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch, onUnmounted } from 'vue'
+import { ref, onMounted, watch, onUnmounted, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { consumeLoginIntent, redirectToLoginOnce, setLoginIntent } from '@/utils/auth'
+import { isMobileFeedRefreshEvent, shouldRefreshMobileFeed } from '@/utils/hotConfig'
 import { formatImageUrl } from '@/utils/image'
 import request from '@/utils/request'
 import { useUserStore } from '@/store/user'
+import { useConfigStore } from '@/store/config'
+
+const HOME_ROUTE = 'pages/index/index'
+const HOME_FEED_CHANNEL = 'home-feed'
 
 const theme = ref(uni.getStorageSync('theme') || 'light')
 const onThemeChange = (t: string) => {
@@ -158,6 +163,13 @@ const onThemeChange = (t: string) => {
 
 onUnmounted(() => {
   uni.$off('menu:theme-change', onThemeChange)
+  try {
+    uni.$off('app:refresh-current-feed', onFeedRefresh)
+  } catch {}
+  if (feedRefreshTimer) {
+    clearTimeout(feedRefreshTimer)
+    feedRefreshTimer = null
+  }
   if (unreadTimer) {
     clearInterval(unreadTimer)
     unreadTimer = null
@@ -200,12 +212,19 @@ const refreshing = ref(false)
 const searchOrder = ref('')
 
 const userStore = useUserStore()
+const configStore = useConfigStore()
 const feedTab = ref<'recommend' | 'following' | 'featured'>('recommend')
+const homeLayout = computed<'grid' | 'waterfall' | 'single'>(() => {
+  const raw = String(configStore.get('home_layout', 'grid') || 'grid')
+  if (raw === 'waterfall' || raw === 'single') return raw
+  return 'grid'
+})
 
 const showLoginPopup = ref(false)
 const loginPopupTabLabel = ref('')
 const loginPopupTargetTab = ref<'recommend' | 'following' | 'featured' | ''>('')
 let unreadTimer: ReturnType<typeof setInterval> | null = null
+let feedRefreshTimer: ReturnType<typeof setTimeout> | null = null
 
 const getDefaultFeedTab = (): 'recommend' | 'following' | 'featured' => {
   const defaultTab = uni.getStorageSync('home_default_tab') as any
@@ -294,6 +313,8 @@ const fetchVideos = async (refresh = false) => {
   }
 }
 
+const refreshFeed = () => fetchVideos(true)
+
 const promptLoginForFeed = (tab: 'following') => {
   loginPopupTargetTab.value = tab
   loginPopupTabLabel.value = tab === 'following' ? '关注' : '推荐'
@@ -323,7 +344,7 @@ const switchFeed = (tab: 'recommend' | 'following' | 'featured') => {
   }
   
   feedTab.value = tab
-  fetchVideos(true)
+  refreshFeed()
 }
 
 watch(searchKeyword, (newVal) => {
@@ -335,12 +356,12 @@ watch(searchKeyword, (newVal) => {
 const changeSearchOrder = (order: string) => {
   if (searchOrder.value === order) return
   searchOrder.value = order
-  fetchVideos(true)
+  refreshFeed()
 }
 
 const onSearch = () => {
   showSearchHistory.value = false
-  fetchVideos(true)
+  refreshFeed()
 }
 
 const onInput = (val: string) => {
@@ -353,7 +374,7 @@ const onClear = () => {
   if (!searchKeyword.value && !showSearchHistory.value) return
   searchKeyword.value = ''
   showSearchHistory.value = false
-  fetchVideos(true)
+  refreshFeed()
 }
 
 const loadSearchHistory = () => {
@@ -398,7 +419,7 @@ const clearHistory = () => {
 const clickHistoryItem = (item: string) => {
   searchKeyword.value = item
   showSearchHistory.value = false
-  fetchVideos(true)
+  refreshFeed()
 }
 
 const fetchCategories = async () => {
@@ -416,7 +437,7 @@ const fetchCategories = async () => {
 const onCategoryChange = (id: string) => {
   if (currentCategoryId.value === id) return
   currentCategoryId.value = id
-  fetchVideos(true)
+  refreshFeed()
 }
 
 const goToDetail = (id: string) => {
@@ -473,6 +494,9 @@ const fetchUnreadCount = async () => {
 
 onMounted(() => {
   uni.$on('menu:theme-change', onThemeChange)
+  try {
+    uni.$on('app:refresh-current-feed', onFeedRefresh)
+  } catch {}
   loadSearchHistory()
   fetchCategories()
 
@@ -480,7 +504,7 @@ onMounted(() => {
     feedTab.value = getDefaultFeedTab()
   }
 
-  fetchVideos()
+  refreshFeed()
   fetchUnreadCount()
   // 每 30 秒轮询一次未读数
   unreadTimer = setInterval(fetchUnreadCount, 30000)
@@ -489,10 +513,22 @@ onMounted(() => {
 onShow(() => {
   const restored = applyLoginIntent()
   if (restored) {
-    fetchVideos(true)
+    refreshFeed()
   }
   fetchUnreadCount()
 })
+
+const onFeedRefresh = (payload: any) => {
+  const detail = isMobileFeedRefreshEvent(payload, HOME_FEED_CHANNEL)
+  if (!detail) return
+  const changed = Array.isArray(detail.changedKeys) ? detail.changedKeys.map((item: any) => String(item || '')) : []
+  if (!shouldRefreshMobileFeed(HOME_ROUTE, feedTab.value, changed)) return
+  if (feedRefreshTimer) clearTimeout(feedRefreshTimer)
+  feedRefreshTimer = setTimeout(() => {
+    feedRefreshTimer = null
+    refreshFeed()
+  }, 80)
+}
 
 const onScrollToLower = () => {
   fetchVideos()
@@ -500,7 +536,7 @@ const onScrollToLower = () => {
 
 const onRefresh = () => {
   refreshing.value = true
-  fetchVideos(true).finally(() => {
+  refreshFeed().finally(() => {
     refreshing.value = false
   })
 }
@@ -754,6 +790,30 @@ const onRefresh = () => {
   flex-wrap: wrap;
   padding: 20rpx;
   gap: 18rpx;
+}
+
+.video-list.layout-single {
+  display: block;
+  padding: 20rpx 24rpx;
+}
+
+.video-list.layout-single .video-card {
+  width: 100%;
+  margin-bottom: 20rpx;
+}
+
+.video-list.layout-waterfall {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.video-list.layout-waterfall .video-card:nth-child(odd) .cover-container {
+  aspect-ratio: 3 / 4;
+}
+
+.video-list.layout-waterfall .video-card:nth-child(even) .cover-container {
+  aspect-ratio: 4 / 5;
 }
 
 .video-card {
