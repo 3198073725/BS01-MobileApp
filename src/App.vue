@@ -4,6 +4,7 @@ import { onLaunch, onShow, onHide } from "@dcloudio/uni-app";
 import request from "@/utils/request";
 import { useUserStore } from "@/store/user";
 import { useConfigStore } from "@/store/config";
+import { startSystemEvents, notifySystemEventsBackground, notifySystemEventsForeground } from "@/utils/systemEvents";
 
 const theme = ref(uni.getStorageSync('theme') || 'light');
 
@@ -121,11 +122,14 @@ onLaunch(() => {
   console.log("App Launch");
   restoreDefaultH5ScrollLock();
   
-  // 初始化全局配置并开启定时轮询
+  // 初始化全局配置并接入系统事件推送
   const configStore = useConfigStore();
-  configStore.fetchConfigs().then(() => {
-    // 每 30 秒检查一次配置版本，实现全端同步强制刷新
-    setInterval(() => configStore.fetchConfigs(), 30000);
+  configStore.fetchConfigs().finally(() => {
+    startSystemEvents({
+      onConfigUpdated: () => {
+        configStore.fetchConfigs();
+      }
+    });
   });
 
   handleH5ResetPasswordDeepLink();
@@ -156,10 +160,12 @@ onLaunch(() => {
 onShow(() => {
   console.log("App Show");
   restoreDefaultH5ScrollLock();
+  notifySystemEventsForeground();
 });
 
 onHide(() => {
   console.log("App Hide");
+  notifySystemEventsBackground();
 });
 </script>
 
