@@ -20,7 +20,7 @@ export default defineConfig(({ mode }) => {
       host: '0.0.0.0',
       port: 5173,
       strictPort: true,
-      allowedHosts: [allowedHost],
+      allowedHosts: [allowedHost, '.monkeycode-ai.online'],
       proxy: {
         '/api': {
           target: devApiOrigin,
